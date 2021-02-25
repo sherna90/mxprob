@@ -22,6 +22,7 @@ class sgd:
     def fit(self,epochs=1,batch_size=1,gamma=0.9,**args):
         X=args['X_train']
         y=args['y_train']
+        n_examples=X.shape[0]
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -31,16 +32,18 @@ class sgd:
         par=deepcopy(self.start)
         for var in par.keys():
             par[var].attach_grad()
-        momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
+        momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
         for i in tqdm(range(epochs)):
+            cumulative_loss=0
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
                 with autograd.record():
                     loss = self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()
                 for var in par.keys():
-                    momentum[var] = gamma * momentum[var] - self.step_size * par[var].grad
-                    par[var]+=momentum[var]
-            loss_val[i]=loss.asscalar()
+                    momentum[var][:] = gamma * momentum[var] + self.step_size * par[var].grad /batch_size
+                    par[var][:]=par[var]-momentum[var]
+                cumulative_loss += nd.sum(loss).asscalar()
+            loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return par,loss_val
