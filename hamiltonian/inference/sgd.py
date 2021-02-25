@@ -34,7 +34,6 @@ class sgd:
         momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
         for i in tqdm(range(epochs)):
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
-                #grad_p=self.model.grad(par,X_train=X_batch,y_train=y_batch)
                 with autograd.record():
                     loss = self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()
