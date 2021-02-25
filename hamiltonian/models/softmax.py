@@ -14,8 +14,8 @@ class softmax():
         self.LOG2PI = np.log(2.0 * np.pi)
 
     def cross_entropy(self, y_hat, y):
-        return -nd.nansum(y * nd.log_softmax(y_hat), axis=0, exclude=True)
-
+        return - nd.sum(y * nd.log(y_hat+1e-6),axis=1)
+        
     def softmax(self, y_linear):
         exp = nd.exp(y_linear-nd.max(y_linear, axis=1).reshape((-1,1)))
         norms = nd.sum(exp, axis=1).reshape((-1,1))
@@ -35,8 +35,6 @@ class softmax():
             if k=='X_train':
                 X=v
         y_linear = nd.dot(X, par['weights']) + par['bias']
-        #y_linear=np.minimum(y_linear,-np.log(np.finfo(float).eps))
-        #y_linear=np.maximum(y_linear,-np.log(1./np.finfo(float).tiny-1.0))
         yhat = self.softmax(y_linear)
         return yhat
 
@@ -59,10 +57,13 @@ class softmax():
      
     def negative_log_prior(self, par,**args):
         log_gaussian= lambda x,mu,sigma :  -0.5 * self.LOG2PI - nd.log(sigma) - (x - mu) ** 2 / (2 * sigma ** 2)
-        K=0
+        prior=nd.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
-            K+=nd.sum(log_gaussian(par[var], 0., self.hyper['alpha']))
-        return K
+            means=nd.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=nd.ones(par[var].shape,ctx=self.ctx)
+            param_prior=log_gaussian(par[var],means,sigmas)
+            prior=prior+nd.nansum(param_prior)/par[var].size
+        return prior
     
     def negative_log_likelihood(self,par,**args):
         for k,v in args.items():
@@ -71,12 +72,8 @@ class softmax():
             elif k=='y_train':
                 y=v
         y_hat = self.forward(par,X_train=X)
-        return 1.0*nd.sum(self.cross_entropy(y_hat,y))
+        return nd.sum(self.cross_entropy(y_hat,y))
         
     def negative_log_posterior(self,par,**args):
-        for k,v in args.items():
-            if k=='X_train':
-                X=v
-                n_data=X.shape[0]
-        return (1.0/n_data)*(self.negative_log_likelihood(par,**args))
-        #+self.negative_log_prior(par,**args))
+        log_like=self.negative_log_likelihood(par,**args)
+        return log_like
