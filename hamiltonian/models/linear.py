@@ -13,13 +13,13 @@ class linear():
         self.ctx=ctx
 
     def predict(self, par,X,prob=False):
-        yhat=self.forward(par,X_train=X)   
+        yhat=self.forward(par,X_train=X)    
         return yhat	
 
     def forward(self,par, **args):
         for k,v in args.items():
             if k=='X_train':
-                X=v
+                X=nd.array(v,ctx=self.ctx)
         y_linear = nd.dot(X, par['weights']) + par['bias']
         y_hat=mxp.normal.Normal(loc=y_linear,scale=1)
         return y_hat
@@ -35,11 +35,26 @@ class linear():
     def negative_log_likelihood(self,par,**args):
         for k,v in args.items():
             if k=='X_train':
-                X=v
+                X=nd.array(v,ctx=self.ctx)
             elif k=='y_train':
-                y=v
+                y=nd.array(v,ctx=self.ctx)
         y_hat = self.forward(par,X_train=X)
-        return -nd.mean(y_hat.log_prob(y))
+        return -nd.mean(y_hat.log_prob(y).as_nd_ndarray())
         
     def negative_log_posterior(self,par,**args):
         return self.negative_log_likelihood(par,**args)
+
+class linear_aleatoric(linear):
+
+    def forward(self,par, **args):
+        for k,v in args.items():
+            if k=='X_train':
+                X=nd.array(v,ctx=self.ctx)
+        y_mean = nd.dot(X, par['weights']) + par['bias'] 
+        y_scale = nd.dot(X, par['weights_scale']) + par['bias_scale']
+        nd.where(y_scale>10,y_scale,nd.log1p(nd.exp(y_scale)))
+        y_hat=mxp.normal.Normal(loc=y_mean,scale=1.0e-3+y_scale)
+        return y_hat
+
+     
+    
