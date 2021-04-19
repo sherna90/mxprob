@@ -52,8 +52,8 @@ class linear_aleatoric(linear):
                 X=nd.array(v,ctx=self.ctx)
         y_mean = nd.dot(X, par['weights']) + par['bias'] 
         y_scale = nd.dot(X, par['weights_scale']) + par['bias_scale']
-        nd.where(y_scale>10,y_scale,nd.log1p(nd.exp(y_scale)))
-        y_hat=mxp.normal.Normal(loc=y_mean,scale=1.0e-3+y_scale)
+        y_scale=nd.where(y_scale>30,y_scale,nd.log1p(nd.exp(y_scale)))
+        y_hat=mxp.normal.Normal(loc=y_mean,scale=y_scale)
         return y_hat
 
      

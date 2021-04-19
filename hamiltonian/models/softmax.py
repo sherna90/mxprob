@@ -4,7 +4,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
-
+import mxnet.gluon.probability as mxp
 
 class softmax():
     
@@ -22,13 +22,8 @@ class softmax():
         return exp / norms
 
     def predict(self, par,X,prob=False):
-        yhat=self.forward(par,X_train=X)   
-        if prob:
-            out=yhat
-        else:
-            pred=yhat.argmax(axis=1)
-            out=pred
-        return out	
+        y_hat=self.forward(par,X_train=X)   
+        return y_hat	
 
     def forward(self,par, **args):
         for k,v in args.items():
@@ -36,7 +31,8 @@ class softmax():
                 X=v
         y_linear = nd.dot(X, par['weights']) + par['bias']
         yhat = self.softmax(y_linear)
-        return yhat
+        cat=mxp.Categorical(1,prob=yhat)
+        return cat
 
     def grad(self,par,**args):
         for k,v in args.items():
@@ -72,7 +68,7 @@ class softmax():
             elif k=='y_train':
                 y=v
         y_hat = self.forward(par,X_train=X)
-        return nd.sum(self.cross_entropy(y_hat,y))
+        return -nd.mean(y_hat.log_prob(y).as_nd_ndarray())
         
     def negative_log_posterior(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
