@@ -1,16 +1,14 @@
 import numpy as np
+import mxnet as mx
+from mxnet import nd, autograd, gluon
 import scipy as sp
-import os
 from hamiltonian.utils import *
 from numpy.linalg import inv,norm
 from copy import deepcopy
-import os 
-from hamiltonian.inference.cpu.sgmcmc import sgmcmc
+from hamiltonian.inference.base import base
 from tqdm import tqdm, trange
-import h5py 
-import time
 
-class sgld(sgmcmc):
+class sgld(base):
 
     def step2(self,state,momentum,rng,**args):
         q = state.copy()
@@ -28,21 +26,18 @@ class sgld(sgmcmc):
             q_new[var]+=p_new[var]
         return q_new,p_new
 
-    def step(self,state,momentum,rng,**args):
+    def step(self,batch_size,momentum,par):
         epsilon=self.step_size
-        q = deepcopy(state)
-        p = self.draw_momentum(rng,epsilon)
-        grad_q=self.model.grad(q,**args)
-        for var in p.keys():
-            p[var]+=  - 0.5  * epsilon * grad_q[var]
-            q[var]+=p[var]
-        return q,p
+        for var in par.keys():
+            momentum[var][:]=  momentum[var] - (0.5  * epsilon * par[var].grad)
+            par[var][:] = par[var] + momentum[var]
+        return momentum, par
 
-    def draw_momentum(self,rng,epsilon):
+    def draw_momentum(self,par,epsilon):
         #momentum={var:np.zeros_like(self.start[var]) for var in self.start.keys()}
         noise_scale = 2.0*epsilon
-        sigma = np.sqrt(max(noise_scale, 1e-16))  
-        momentum={var:rng.normal(0,noise_scale,size=self.start[var].shape) for var in self.start.keys()}
+        sigma = np.sqrt(max(noise_scale, 1e-16))
+        momentum={var:nd.zeros_like(0,noise_scale,size=self.start[var].shape,ctx=self.ctx) for var in par.keys()}
         return momentum
 
 
