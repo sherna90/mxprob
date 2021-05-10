@@ -33,6 +33,9 @@ class sgld(base):
             par[var][:] = par[var] + momentum[var]
         return momentum, par
 
+    def floss(self,par, X_batch, y_batch,w_0,e):
+        return self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
+
     def draw_momentum(self,par,epsilon):
         #momentum={var:np.zeros_like(self.start[var]) for var in self.start.keys()}
         noise_scale = 2.0*epsilon

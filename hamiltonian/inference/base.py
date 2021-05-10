@@ -3,6 +3,7 @@ import mxnet as mx
 from mxnet import nd, autograd, gluon
 from tqdm import tqdm, trange
 from copy import deepcopy
+import mxnet.gluon.probability as mxp
 
 class base:
 
@@ -12,6 +13,8 @@ class base:
         self.model = model
         self.ctx=ctx
         self.gamma=0.9
+        self.sigma=3
+        self.num_batches=0
         
 
     def iterate_minibatches(self, X, y, batchsize):
@@ -35,30 +38,37 @@ class base:
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         par=deepcopy(self.start)
-        num_batches=np.ceil(y[:].shape[0]/float(batch_size))#conseguir
-        decay_factor=self.step_size/num_batches
+        self.num_batches=np.ceil(y[:].shape[0]/float(batch_size))#conseguir
+        decay_factor=self.step_size/self.num_batches
         initial_step_size=self.step_size
         for var in par.keys():
             par[var].attach_grad()
         momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+        #parametros para bayes by backprop
+        w_0 = nd.array([1,1,1,1])
+        e = mxp.normal.Normal(loc=0,scale=1)
+        ytensor = y.reshape([len(y),1])
+        #----------------------------------
         for i in tqdm(range(epochs)):
             cumulative_loss=0
             j=0
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
                 with autograd.record():
-                    loss = self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
-                loss.backward()#calculo de deribadas parciales de la funcion segun sus parametros. por retropropagacion
+                    loss = self.floss(par,X_batch,y_batch,w_0,e)
+                    #loss = self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #loss es el gradiente
                 momentum, par = self.step(batch_size,momentum, par)
                 #aplicar decaimiento 
-                self.step_size = self.lr(initial_step_size,j,decay_factor,num_batches,cumulative_loss)
+                #self.step_size = self.lr(initial_step_size,j,decay_factor,self.num_batches)
                 j = j+1 
                 cumulative_loss += nd.sum(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples
+            #w_0 -= loss_val[i]
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return par,loss_val
 
-    def lr(self,initial_step_size,step,decay_factor,num_batches,grad):
-        #return initial_step_size * (1.0/(1.0+step*decay_factor*num_batches))
-        return initial_step_size - step*decay_factor/num_batches
+    def lr(self,initial_step_size,step,decay_factor,num_batches):
+        return initial_step_size * (1.0/(1.0+step*decay_factor*num_batches))
+        #return initial_step_size - (decay_factor*step/num_batches)
