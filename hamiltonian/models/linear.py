@@ -47,11 +47,12 @@ class linear():
 class linear_aleatoric(linear):
 
     def forward(self,par, **args):
+        softplus = lambda x : nd.log(1. + nd.exp(x))
         for k,v in args.items():
             if k=='X_train':
                 X=nd.array(v,ctx=self.ctx)
         y_mean = nd.dot(X, par['weights']) + par['bias'] 
-        y_scale = nd.dot(X, par['weights_scale']) + par['bias_scale']
+        y_scale = softplus(nd.dot(X, par['weights_scale']) + par['bias_scale'])
         #y_scale=nd.where(y_scale>30,y_scale,nd.log1p(nd.exp(y_scale)))
         y_hat=mxp.normal.Normal(loc=y_mean,scale=y_scale)
         return y_hat
