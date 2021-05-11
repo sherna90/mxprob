@@ -41,12 +41,14 @@ class base:
         self.num_batches=np.ceil(y[:].shape[0]/float(batch_size))#conseguir
         decay_factor=self.step_size/self.num_batches
         initial_step_size=self.step_size
+        momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+        e={var:mxp.normal.Normal(loc=0,scale=1) for var in par.keys()}
+        stds={var:nd.random.normal(shape=par[var].shape) for var in par.keys()}
         for var in par.keys():
             par[var].attach_grad()
-        momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+            stds[var].attach_grad()
         #parametros para bayes by backprop
         w_0 = nd.array([1,1,1,1])
-        e = mxp.normal.Normal(loc=0,scale=1)
         ytensor = y.reshape([len(y),1])
         #----------------------------------
         for i in tqdm(range(epochs)):
@@ -54,7 +56,7 @@ class base:
             j=0
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
                 with autograd.record():
-                    loss = self.floss(par,X_batch,y_batch,w_0,e)
+                    loss = self.floss(par,stds,X_batch,y_batch,w_0,e)
                     #loss = self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #loss es el gradiente

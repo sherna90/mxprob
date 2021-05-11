@@ -14,34 +14,57 @@ class bbb(base):
 
 
     #loss: Bayesian inference
-    def floss(self,par, X_batch, y_batch,w_0,e):
-        mu_a = par['weights']
-        sig_a = self.softplus(par['weights_scale'])
+    def floss(self,par,stds,X_batch, y_batch,w_0,e):
+        mean_samples={}
+        std_samples={}
+        l_kl=0
+        for var in par.keys():
+            mean_samples.update({var:par[var]})
+            std_samples.update({var:self.softplus(stds[var])})
+        new_par=dict()
+        for var in par.keys():
+            l_kl =l_kl+(1.0 + nd.log(std_samples[var]**2) - std_samples[var]**2 - mean_samples[var]**2)
+            new_par.update({var:mean_samples[var] + (std_samples[var] * (e[var].sample(1).as_nd_ndarray()))}) 
+        l_kl=-0.5*l_kl
+        # mu_a = par['weights']
+        # sig_a = self.softplus(par['weights_std'])
 
 
-        mu_b = par['bias']
-        sig_b = self.softplus(par['bias_scale'])
+        # mu_b = par['bias']
+        # sig_b = self.softplus(par['bias_std'])
+
+        # mu_c = par['weights_scale']
+        # sig_c = nd.log1p(nd.exp(par['weights_scale_std']))#self.softplus()
+
+        # mu_d = par['bias_scale']
+        # sig_d = nd.log1p(nd.exp(par['bias_scale_std']))#self.softplus(par['bias_scale_std'])
 
         #divergencia kl
-        l_kl = -0.5*(1.0 + nd.log(sig_a**2) - sig_a**2 - mu_a**2 + 1.0 + nd.log(sig_b**2) - sig_b**2 - mu_b**2)
+        # l_kl = -0.5*(1.0 + nd.log(sig_a**2) - sig_a**2 - mu_a**2 
+        #         + 1.0 + nd.log(sig_b**2) - sig_b**2 - mu_b**2+
+        #         + 1.0 + nd.log(sig_c**2) - sig_c**2 - mu_c**2
+        #         + 1.0 + nd.log(sig_d**2) - sig_d**2 - mu_d**2)
 
         #muestras a y b
-        a = mu_a + (sig_a * (e.sample(1).as_nd_ndarray()))
-        #a = a.asscalar()
-        b = mu_b + (sig_b * (e.sample(1).as_nd_ndarray()))
-        #b = b.asscalar()
-        
+        # a = mu_a + (sig_a * (e['weights'].sample(1).as_nd_ndarray()))
+        # #a = a.asscalar()
+        # b = mu_b + (sig_b * (e['bias'].sample(1).as_nd_ndarray()))
+        # #b = b.asscalar()
+        # c = mu_c + (sig_c * (e['weights_scale'].sample(1).as_nd_ndarray()))
+        # #a = a.asscalar()
+        # d = mu_d + (sig_d * (e['bias_scale'].sample(1).as_nd_ndarray()))
+        # #b = b.asscalar()     
         
         #forward(linear)
-        X = nd.array(X_batch,ctx=self.ctx)
-        y_linear = nd.dot(X,a) + b
-        y_prob = mxp.normal.Normal(loc=y_linear,scale=self.sigma)
+        #X = nd.array(X_batch,ctx=self.ctx)
+        #y_linear = nd.dot(X,a) + b
+        #y_prob = mxp.normal.Normal(loc=y_linear,scale=self.sigma)
         
         
         #likelihood
-        par2={'weights':a,'bias':b,'weights_scale':par['weights_scale'],'bias_scale':par['bias_scale']}
+        #par2={'weights':a,'bias':b,'weights_scale':c,'bias_scale':nd.array([0.001])}
         y = nd.array(y_batch,ctx=self.ctx)
-        l_nll = self.model.negative_log_likelihood(par2,X_train=X_batch,y_train=y_batch)
+        l_nll = self.model.negative_log_likelihood(new_par,X_train=X_batch,y_train=y_batch)
         #-nd.mean(y_prob.log_prob(y).as_nd_ndarray())
         
         
