@@ -56,8 +56,8 @@ class base:
             j=0
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
                 with autograd.record():
-                    loss = self.floss(par,stds,X_batch,y_batch,w_0,e)
-                    #loss = self.model.negative_log_posterior(par,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(par,X_train=X_batch,y_train=y_batch,stds=stds,e=e)
+                    #loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #loss es el gradiente
                 momentum, par = self.step(batch_size,momentum, par)

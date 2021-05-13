@@ -40,7 +40,7 @@ class linear():
         y_hat = self.forward(par,X_train=X)
         return -nd.mean(y_hat.log_prob(y).as_nd_ndarray())
         
-    def negative_log_posterior(self,par,**args):
+    def loss(self,par,**args):
         return self.negative_log_likelihood(par,**args)
     
 

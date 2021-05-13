@@ -14,17 +14,26 @@ class bbb(base):
 
 
     #loss: Bayesian inference
-    def floss(self,par,stds,X_batch, y_batch,w_0,e):
+    def loss(self,par,**args):
+        for k,v in args.items():
+            if k=='X_train':
+                X_batch=v
+            elif k=='y_train':
+                y_batch=v
+            elif k=='stds':
+                stds=v
+            elif k=='e':
+                e=v
         mean_samples={}
         std_samples={}
         l_kl=0
         for var in par.keys():
-            mean_samples.update({var:par[var]})
+            mean_samples.update({var:par[var]}) 
             std_samples.update({var:self.softplus(stds[var])})
-        new_par=dict()
         for var in par.keys():
             l_kl =l_kl+(1.0 + nd.log(std_samples[var]**2) - std_samples[var]**2 - mean_samples[var]**2)
-            new_par.update({var:mean_samples[var] + (std_samples[var] * (e[var].sample(1).as_nd_ndarray()))}) 
+            par.update({var:mean_samples[var] + (std_samples[var] * (e[var].sample(1).as_nd_ndarray()))}) 
+            #par.update({var:mean_samples[var]}) 
         l_kl=-0.5*l_kl
         # mu_a = par['weights']
         # sig_a = self.softplus(par['weights_std'])
@@ -34,7 +43,7 @@ class bbb(base):
         # sig_b = self.softplus(par['bias_std'])
 
         # mu_c = par['weights_scale']
-        # sig_c = nd.log1p(nd.exp(par['weights_scale_std']))#self.softplus()
+        # sig_c = nd.log1p(nd.exp(par['weights_scale_std']))#self.sofutpls()
 
         # mu_d = par['bias_scale']
         # sig_d = nd.log1p(nd.exp(par['bias_scale_std']))#self.softplus(par['bias_scale_std'])
@@ -64,12 +73,12 @@ class bbb(base):
         #likelihood
         #par2={'weights':a,'bias':b,'weights_scale':c,'bias_scale':nd.array([0.001])}
         y = nd.array(y_batch,ctx=self.ctx)
-        l_nll = self.model.negative_log_likelihood(new_par,X_train=X_batch,y_train=y_batch)
+        l_nll = self.model.loss(par,X_train=X_batch,y_train=y_batch)
         #-nd.mean(y_prob.log_prob(y).as_nd_ndarray())
         
         
         #loss function
-        loss = l_kl + l_nll 
+        loss = l_kl/(y_batch.shape[0]-1) + l_nll 
         
         return loss
     
