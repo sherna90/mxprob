@@ -13,8 +13,6 @@ class softmax():
         self.ctx=ctx
         self.LOG2PI = np.log(2.0 * np.pi)
 
-    def cross_entropy(self, y_hat, y):
-        return - nd.sum(y * nd.log(y_hat+1e-6),axis=1)
         
     def softmax(self, y_linear):
         exp = nd.exp(y_linear-nd.max(y_linear, axis=1).reshape((-1,1)))
@@ -29,37 +27,19 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v
-        y_linear = nd.dot(X, par['weights']) + par['bias']
+        y_linear = nd.dot(X, par['weights'].data()) + par['bias'].data()
         yhat = self.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
-
-    def grad(self,par,**args):
-        for k,v in args.items():
-            if k=='X_train':
-                X=v
-            elif k=='y_train':
-                y=v
-        yhat=self.forward(par,X_train=X)
-        diff = y-yhat
-        grad_w = nd.dot(X.T, diff)
-        grad_b = nd.sum(diff, axis=0)
-        grad={}
-        grad['weights']=grad_w
-        grad['weights']=-1.0*grad['weights']
-        grad['bias']=grad_b
-        grad['bias']=-1.0*grad['bias']
-        return grad	
      
     def negative_log_prior(self, par,**args):
-        log_gaussian= lambda x,mu,sigma :  -0.5 * self.LOG2PI - nd.log(sigma) - (x - mu) ** 2 / (2 * sigma ** 2)
-        prior=nd.zeros(shape=1,ctx=self.ctx)
+        log_prior=nd.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
-            sigmas=nd.ones(par[var].shape,ctx=self.ctx)
-            param_prior=log_gaussian(par[var],means,sigmas)
-            prior=prior+nd.nansum(param_prior)/par[var].size
-        return prior
+            sigmas=nd.ones(par[var].shape,ctx=self.ctx)*self.hyper['alpha']
+            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var].data()).as_nd_ndarray())
+        return log_prior
     
     def negative_log_likelihood(self,par,**args):
         for k,v in args.items():
@@ -72,4 +52,5 @@ class softmax():
         
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
-        return log_like
+        log_prior=self.negative_log_prior(par,**args)
+        return log_like+log_prior
