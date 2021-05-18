@@ -7,6 +7,36 @@ from hamiltonian.inference.base import base
 
 class sgd(base):
 
+    def fit(self,epochs=1,batch_size=1,**args):
+        X=args['X_train']
+        y=args['y_train']
+        n_examples=X.shape[0]
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        par=deepcopy(self.start)
+        momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+        for var in par.keys():
+            par[var].attach_grad()
+        for i in tqdm(range(epochs)):
+            cumulative_loss=0
+            j=0
+            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+                with autograd.record():
+                    loss = self.loss(par,X_train=X_batch,y_train=y_batch)
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                momentum, par = self.step(batch_size,momentum, par)
+                j = j+1 
+                cumulative_loss += nd.sum(loss).asscalar()
+            loss_val[i]=cumulative_loss/n_examples
+            if verbose and (i%(epochs/10)==0):
+                print('loss: {0:.4f}'.format(loss_val[i]))
+        return par,loss_val
+
+
     def loss(self,par,X_train,y_train):
         return self.model.loss(par,X_train=X_train,y_train=y_train)
     
