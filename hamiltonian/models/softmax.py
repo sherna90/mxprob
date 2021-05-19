@@ -27,7 +27,7 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v
-        y_linear = nd.dot(X, par['weights'].data()) + par['bias'].data()
+        y_linear = nd.dot(X, par['weights']) + par['bias']
         yhat = self.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
@@ -38,7 +38,7 @@ class softmax():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
             sigmas=nd.ones(par[var].shape,ctx=self.ctx)*self.hyper['alpha']
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
-            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var].data()).as_nd_ndarray())
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
         return log_prior
     
     def negative_log_likelihood(self,par,**args):
