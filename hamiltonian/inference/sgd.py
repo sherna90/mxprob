@@ -7,6 +7,39 @@ from hamiltonian.inference.base import base
 
 class sgd(base):
 
+    def fit_gluon(self,epochs=1,batch_size=1,**args):
+        X=args['X_train']
+        y=args['y_train']
+        n_examples=X.shape[0]
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        par=deepcopy(self.start)
+        for var in par.keys():
+            par[var].attach_grad()
+        sgd = mx.optimizer.Optimizer.create_optimizer('sgd')
+        states=list()
+        indices=list()
+        for i,var in enumerate(par.keys()):
+            states.append(sgd.create_state(i,par[var]))
+            indices.append(i)
+        for i in tqdm(range(epochs)):
+            cumulative_loss=0
+            j=0
+            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+                with autograd.record():
+                    loss = self.loss(par,X_train=X_batch,y_train=y_batch)
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                sgd.update(indices,[par[var] for var in par.keys()],[par[var].grad for var in par.keys()],states)
+                cumulative_loss += nd.sum(loss).asscalar()
+            loss_val[i]=cumulative_loss/n_examples
+            if verbose and (i%(epochs/10)==0):
+                print('loss: {0:.4f}'.format(loss_val[i]))
+        return par,loss_val
+
     def fit(self,epochs=1,batch_size=1,**args):
         X=args['X_train']
         y=args['y_train']
@@ -18,9 +51,9 @@ class sgd(base):
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         par=deepcopy(self.start)
-        momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
         for var in par.keys():
             par[var].attach_grad()
+        momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
         for i in tqdm(range(epochs)):
             cumulative_loss=0
             j=0
@@ -28,14 +61,12 @@ class sgd(base):
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                momentum, par = self.step(batch_size,momentum, par)
-                j = j+1 
+                momentum,par=self.step(batch_size,momentum,par)
                 cumulative_loss += nd.sum(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return par,loss_val
-
 
     def loss(self,par,X_train,y_train):
         return self.model.loss(par,X_train=X_train,y_train=y_train)
