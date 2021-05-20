@@ -20,7 +20,8 @@ class sgd(base):
         par=deepcopy(self.start)
         for var in par.keys():
             par[var].attach_grad()
-        sgd = mx.optimizer.Optimizer.create_optimizer('sgd')
+        sgd = mx.optimizer.Optimizer.create_optimizer('sgd',
+            learning_rate=self.step_size,rescale_grad=batch_size)
         states=list()
         indices=list()
         for i,var in enumerate(par.keys()):
@@ -68,8 +69,6 @@ class sgd(base):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return par,loss_val
 
-    def loss(self,par,X_train,y_train):
-        return self.model.loss(par,X_train=X_train,y_train=y_train)
     
     def step(self,batch_size,momentum,par):
         for var in par.keys():

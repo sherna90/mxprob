@@ -74,3 +74,6 @@ class base:
     def lr(self,initial_step_size,step,decay_factor,num_batches):
         return initial_step_size * (1.0/(1.0+step*decay_factor*num_batches))
         #return initial_step_size - (decay_factor*step/num_batches)
+
+    def loss(self,par,X_train,y_train):
+        return self.model.loss(par,X_train=X_train,y_train=y_train)
