@@ -71,7 +71,7 @@ class base:
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return par,loss_val
 
-    def lr(self,initial_step_size,step,decay_factor,num_batches):
+    def lr_schedule(self,initial_step_size,step,decay_factor,num_batches):
         return initial_step_size * (1.0/(1.0+step*decay_factor*num_batches))
         #return initial_step_size - (decay_factor*step/num_batches)
 

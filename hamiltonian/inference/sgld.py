@@ -54,47 +54,32 @@ class sgld(base):
         par=deepcopy(self.start)
         for var in par.keys():
             par[var].attach_grad()
+        j=0
+        #momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
         for i in tqdm(range(epochs)):
             cumulative_loss=0
-            j=0
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                momentum=self.draw_momentum(par,self.step_size)
-                _,par=self.step(batch_size,momentum,par)
+                epsilon=self.step_size*((30 + j) ** (-0.55))
+                momentum=self.draw_momentum(par,epsilon)
+                _,par=self.step(n_examples,batch_size,momentum,epsilon,par)
                 cumulative_loss += nd.sum(loss).asscalar()
+                j=j+1
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return par,loss_val
 
-    def step2(self,state,momentum,rng,**args):
-        q = state.copy()
-        epsilon=self.step_size
-        noise_scale = 2.0*epsilon
-        sigma = np.sqrt(max(noise_scale, 1e-16))     
-        p = self.draw_momentum(rng,sigma)
-        q_new = deepcopy(q)
-        p_new = deepcopy(p)
-        grad_q=self.model.grad(q,**args)
-        for var in q_new.keys():
-            dim=(np.array(self.start[var])).size
-            nu=rng.normal(0,1,size=q_new[var].shape)
-            p_new[var] = nu*p_new[var] + (1.0/n_batch)*epsilon * grad_q[var]/norm(grad_q[var])
-            q_new[var]+=p_new[var]
-        return q_new,p_new
-
-    def step(self,batch_size,momentum,par):
-        epsilon=self.step_size
+    def step(self,n_data,batch_size,momentum,epsilon,par):
         for var in par.keys():
-            momentum[var][:]=  momentum[var] - (0.5  * epsilon * par[var].grad/batch_size)
-            par[var][:] = par[var] - momentum[var]
+            momentum[var][:]=  momentum[var] - (0.5  * epsilon  * (n_data//batch_size) * par[var].grad)
+            par[var][:] = par[var] + momentum[var]
         return momentum, par
 
     def draw_momentum(self,par,epsilon):
-        sigma = np.sqrt(max(epsilon, 1e-16))
-        momentum={var:random.normal(0,np.sqrt(epsilon),
+        momentum={var:np.sqrt(epsilon)*random.normal(0,1,
             shape=par[var].shape,
             ctx=self.ctx,
             dtype=par[var].dtype) for var in par.keys()}

@@ -36,7 +36,7 @@ class softmax():
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
-            sigmas=nd.ones(par[var].shape,ctx=self.ctx)*self.hyper['alpha']
+            sigmas=nd.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
             log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
         return log_prior
