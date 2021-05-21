@@ -54,3 +54,16 @@ class softmax():
         log_like=self.negative_log_likelihood(par,**args)
         log_prior=self.negative_log_prior(par,**args)
         return log_like+log_prior
+
+
+class hierarchical_softmax(softmax):
+    
+    def negative_log_prior(self, par,**args):
+        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        prior=mxp.Gamma(shape=1.0,scale=1.0)
+        for var in par.keys():
+            means=nd.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=1./prior.sample(par[var].shape).copyto(self.ctx)
+            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
+        return log_prior
