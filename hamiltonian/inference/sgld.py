@@ -55,7 +55,7 @@ class sgld(base):
         for var in par.keys():
             par[var].attach_grad()
         j=0
-        #momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
+        samples={var:[] for var in par.keys()}
         for i in tqdm(range(epochs)):
             cumulative_loss=0
             for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
@@ -68,9 +68,11 @@ class sgld(base):
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
+            for var in par.keys():
+                samples[var].append(par[var])
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-        return par,loss_val
+        return par,loss_val,samples
 
     def step(self,n_data,batch_size,momentum,epsilon,par):
         for var in par.keys():
