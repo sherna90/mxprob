@@ -21,9 +21,10 @@ class sgld(base):
         for var in par.keys():
             par[var].attach_grad()
         sgld = mx.optimizer.Optimizer.create_optimizer('sgld',
-            learning_rate=self.step_size,rescale_grad=batch_size)
+            learning_rate=self.step_size,rescale_grad=1./batch_size)
         states=list()
         indices=list()
+        samples={var:[] for var in par.keys()}
         for i,var in enumerate(par.keys()):
             states.append(sgld.create_state(i,par[var]))
             indices.append(i)
@@ -39,7 +40,9 @@ class sgld(base):
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-        return par,loss_val
+            for var in par.keys():
+                samples[var].append(par[var])
+        return par,loss_val,samples
 
     def fit(self,epochs=1,batch_size=1,**args):
         X=args['X_train']
