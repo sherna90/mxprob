@@ -41,9 +41,10 @@ class base:
         self.num_batches=np.ceil(y[:].shape[0]/float(batch_size))#conseguir
         decay_factor=self.step_size/self.num_batches
         initial_step_size=self.step_size
-        momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
-        e={var:mxp.normal.Normal(loc=0,scale=1) for var in par.keys()}
-        stds={var:nd.random.normal(shape=par[var].shape) for var in par.keys()}
+        par_momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+        std_momentum={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+        e={var:nd.random_normal(shape=par[var].shape, loc=0., scale=1.0, ctx=self.ctx) for var in par.keys()}
+        stds={var:nd.random.normal(shape=par[var].shape,ctx=self.ctx) for var in par.keys()}
         for var in par.keys():
             par[var].attach_grad()
             stds[var].attach_grad()
@@ -60,7 +61,8 @@ class base:
                     #loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #loss es el gradiente
-                momentum, par = self.step(batch_size,momentum, par)
+                par_momentum, par = self.step(batch_size,par_momentum, par)
+                std_momentum, stds = self.step(batch_size,std_momentum, stds)
                 #aplicar decaimiento 
                 #self.step_size = self.lr(initial_step_size,j,decay_factor,self.num_batches)
                 j = j+1 

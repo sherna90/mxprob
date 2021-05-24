@@ -21,7 +21,7 @@ class sgd(base):
         for var in par.keys():
             par[var].attach_grad()
         sgd = mx.optimizer.Optimizer.create_optimizer('sgd',
-            learning_rate=self.step_size,rescale_grad=batch_size)
+            learning_rate=self.step_size,rescale_grad=1./batch_size)
         states=list()
         indices=list()
         for i,var in enumerate(par.keys()):

@@ -24,15 +24,19 @@ class bbb(base):
                 stds=v
             elif k=='e':
                 e=v
-        mean_samples={}
-        std_samples={}
+        mean_samples={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
+        std_samples={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
         l_kl=0
         for var in par.keys():
-            mean_samples.update({var:par[var]}) 
             std_samples.update({var:self.softplus(stds[var])})
         for var in par.keys():
-            l_kl =l_kl+(1.0 + nd.log(std_samples[var]**2) - std_samples[var]**2 - mean_samples[var]**2)
-            par.update({var:mean_samples[var] + (std_samples[var] * (e[var].sample(1).as_nd_ndarray()))}) 
+            l_kl =l_kl+(1.0 + 
+                nd.sum(nd.log(std_samples[var]**2)) - 
+                nd.sum(std_samples[var]**2) - 
+                nd.sum(mean_samples[var]**2))
+            #par.update({var:mean_samples[var] + (std_samples[var] * (e[var].sample(1).as_nd_ndarray()))})
+            #mean_samples[var][:]=par[var] + (std_samples[var] * e[var])
+            mean_samples[var][:]=par[var] 
             #par.update({var:mean_samples[var]}) 
         l_kl=-0.5*l_kl
         # mu_a = par['weights']
@@ -72,7 +76,7 @@ class bbb(base):
         
         #likelihood
         #par2={'weights':a,'bias':b,'weights_scale':c,'bias_scale':nd.array([0.001])}
-        y = nd.array(y_batch,ctx=self.ctx)
+        y = nd.array(mean_samples,ctx=self.ctx)
         l_nll = self.model.loss(par,X_train=X_batch,y_train=y_batch)
         #-nd.mean(y_prob.log_prob(y).as_nd_ndarray())
         
