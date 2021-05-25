@@ -15,6 +15,7 @@ class bbb(base):
     def fit(self,epochs=1,batch_size=1,**args):
         X=args['X_train']
         y=args['y_train']
+        n_data=X.shape[0]
         n_examples=X.shape[0]
         if 'verbose' in args:
             verbose=args['verbose']
@@ -40,7 +41,7 @@ class bbb(base):
                     for var in means.keys():
                         sigmas[var][:]=self.softplus(stds[var])
                         par[var][:]=means[var] + (stds[var] * epsilons[var]) 
-                    loss = self.loss(par,means,sigmas,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(par,means,sigmas,n_data,batch_size,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus meansametros. por retropropagacion
                 #loss es el gradiente
                 means_momentum, means = self.step(batch_size,means_momentum, means)
@@ -54,18 +55,19 @@ class bbb(base):
         return par,loss_val,(means,stds)
 
     #loss: Bayesian inference
-    def loss(self,par,means,sigmas,**args):
+    def loss(self,par,means,sigmas,n_data,batch_size,**args):
         for k,v in args.items():
             if k=='X_train':
                 X_train=v
             elif k=='y_train':
                 y_train=v
+        num_batches=n_data/batch_size
         nll=self.model.loss(par,X_train=X_train,y_train=y_train)
         log_var_posterior=list()
         for var in par.keys():
-            variational_posterior=mxp.normal.Normal(loc=means[var],scale=sigmas[var])
+            variational_posterior=mxp.normal.Normal(loc=means[var],scale=self.softplus(sigmas[var]))
             log_var_posterior.append(nd.sum(variational_posterior.log_prob(par[var]).as_nd_ndarray()))
-        return nll
+        return nll+ 1.0 / num_batches * sum(log_var_posterior)
     
     def step(self,batch_size,momentum,par):
         momentum, par = sgd.step(self, batch_size,momentum,par)
