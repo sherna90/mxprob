@@ -12,79 +12,60 @@ class bbb(base):
     def softplus(self,x):
         return nd.log(1. + nd.exp(x))
 
+    def fit(self,epochs=1,batch_size=1,**args):
+        X=args['X_train']
+        y=args['y_train']
+        n_examples=X.shape[0]
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        means=deepcopy(self.start)
+        means_momentum={var:nd.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
+        std_momentum={var:nd.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
+        stds={var:nd.random.normal(shape=means[var].shape,ctx=self.ctx) for var in means.keys()}
+        for var in means.keys():
+            means[var].attach_grad()
+            stds[var].attach_grad()
+        for i in tqdm(range(epochs)):
+            cumulative_loss=0
+            j=0
+            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+                par={var:nd.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
+                sigmas={var:nd.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
+                with autograd.record():
+                    epsilons={var:nd.random.normal(shape=means[var].shape, loc=0., scale=1.0,ctx=self.ctx) for var in means.keys()}
+                    for var in means.keys():
+                        sigmas[var][:]=self.softplus(stds[var])
+                        par[var][:]=means[var] + (stds[var] * epsilons[var]) 
+                    loss = self.loss(par,means,sigmas,X_train=X_batch,y_train=y_batch)
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus meansametros. por retropropagacion
+                #loss es el gradiente
+                means_momentum, means = self.step(batch_size,means_momentum, means)
+                std_momentum, stds = self.step(batch_size,std_momentum, stds)
+                j = j+1 
+                cumulative_loss += nd.sum(loss).asscalar()
+            loss_val[i]=cumulative_loss/n_examples
+            #w_0 -= loss_val[i]
+            if verbose and (i%(epochs/10)==0):
+                print('loss: {0:.4f}'.format(loss_val[i]))
+        return par,loss_val,(means,stds)
 
     #loss: Bayesian inference
-    def loss(self,par,**args):
+    def loss(self,par,means,sigmas,**args):
         for k,v in args.items():
             if k=='X_train':
-                X_batch=v
+                X_train=v
             elif k=='y_train':
-                y_batch=v
-            elif k=='stds':
-                stds=v
-            elif k=='e':
-                e=v
-        mean_samples={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
-        std_samples={var:nd.zeros_like(par[var],ctx=self.ctx) for var in par.keys()}
-        l_kl=0
+                y_train=v
+        nll=self.model.loss(par,X_train=X_train,y_train=y_train)
+        log_var_posterior=list()
         for var in par.keys():
-            std_samples.update({var:self.softplus(stds[var])})
-        for var in par.keys():
-            l_kl =l_kl+(1.0 + 
-                nd.sum(nd.log(std_samples[var]**2)) - 
-                nd.sum(std_samples[var]**2) - 
-                nd.sum(mean_samples[var]**2))
-            #par.update({var:mean_samples[var] + (std_samples[var] * (e[var].sample(1).as_nd_ndarray()))})
-            #mean_samples[var][:]=par[var] + (std_samples[var] * e[var])
-            mean_samples[var][:]=par[var] 
-            #par.update({var:mean_samples[var]}) 
-        l_kl=-0.5*l_kl
-        # mu_a = par['weights']
-        # sig_a = self.softplus(par['weights_std'])
-
-
-        # mu_b = par['bias']
-        # sig_b = self.softplus(par['bias_std'])
-
-        # mu_c = par['weights_scale']
-        # sig_c = nd.log1p(nd.exp(par['weights_scale_std']))#self.sofutpls()
-
-        # mu_d = par['bias_scale']
-        # sig_d = nd.log1p(nd.exp(par['bias_scale_std']))#self.softplus(par['bias_scale_std'])
-
-        #divergencia kl
-        # l_kl = -0.5*(1.0 + nd.log(sig_a**2) - sig_a**2 - mu_a**2 
-        #         + 1.0 + nd.log(sig_b**2) - sig_b**2 - mu_b**2+
-        #         + 1.0 + nd.log(sig_c**2) - sig_c**2 - mu_c**2
-        #         + 1.0 + nd.log(sig_d**2) - sig_d**2 - mu_d**2)
-
-        #muestras a y b
-        # a = mu_a + (sig_a * (e['weights'].sample(1).as_nd_ndarray()))
-        # #a = a.asscalar()
-        # b = mu_b + (sig_b * (e['bias'].sample(1).as_nd_ndarray()))
-        # #b = b.asscalar()
-        # c = mu_c + (sig_c * (e['weights_scale'].sample(1).as_nd_ndarray()))
-        # #a = a.asscalar()
-        # d = mu_d + (sig_d * (e['bias_scale'].sample(1).as_nd_ndarray()))
-        # #b = b.asscalar()     
-        
-        #forward(linear)
-        #X = nd.array(X_batch,ctx=self.ctx)
-        #y_linear = nd.dot(X,a) + b
-        #y_prob = mxp.normal.Normal(loc=y_linear,scale=self.sigma)
-        
-        
-        #likelihood
-        #par2={'weights':a,'bias':b,'weights_scale':c,'bias_scale':nd.array([0.001])}
-        y = nd.array(mean_samples,ctx=self.ctx)
-        l_nll = self.model.loss(par,X_train=X_batch,y_train=y_batch)
-        #-nd.mean(y_prob.log_prob(y).as_nd_ndarray())
-        
-        
-        #loss function
-        loss = l_kl/(y_batch.shape[0]-1) + l_nll 
-        
-        return loss
+            variational_posterior=mxp.normal.Normal(loc=means[var],scale=sigmas[var])
+            log_var_posterior.append(nd.sum(variational_posterior.log_prob(par[var]).as_nd_ndarray()))
+        return nll
     
     def step(self,batch_size,momentum,par):
         momentum, par = sgd.step(self, batch_size,momentum,par)
