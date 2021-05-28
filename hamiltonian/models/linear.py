@@ -38,7 +38,7 @@ class linear():
             elif k=='y_train':
                 y=nd.array(v,ctx=self.ctx)
         y_hat = self.forward(par,X_train=X)
-        return -nd.mean(y_hat.log_prob(y).as_nd_ndarray())
+        return -nd.sum(y_hat.log_prob(y).as_nd_ndarray())
         
     def loss(self,par,**args):
         return self.negative_log_likelihood(par,**args)
