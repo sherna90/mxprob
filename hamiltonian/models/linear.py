@@ -21,7 +21,7 @@ class linear():
             if k=='X_train':
                 X=nd.array(v,ctx=self.ctx)
         y_linear = nd.dot(X, par['weights']) + par['bias']
-        y_hat=mxp.normal.Normal(loc=y_linear,scale=1)
+        y_hat=mxp.normal.Normal(loc=y_linear,scale=self.hyper['scale'])
         return y_hat
      
     def negative_log_prior(self, par,**args):
