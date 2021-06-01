@@ -13,8 +13,6 @@ class base:
         self.model = model
         self.ctx=ctx
         self.gamma=0.9
-        self.sigma=3
-        self.num_batches=0
         
 
     def iterate_minibatches(self, X, y, batchsize):

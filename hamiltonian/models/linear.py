@@ -21,15 +21,17 @@ class linear():
             if k=='X_train':
                 X=nd.array(v,ctx=self.ctx)
         y_linear = nd.dot(X, par['weights']) + par['bias']
-        y_hat=mxp.normal.Normal(loc=y_linear,scale=self.hyper['scale'])
+        y_hat=mxp.normal.Normal(loc=y_linear,scale=np.sqrt(self.hyper['scale']))
         return y_hat
      
     def negative_log_prior(self, par,**args):
-        K=nd.zeros(1)
+        log_prior=nd.zeros(1)
         for var in par.keys():
-            prior=mxp.normal.Normal(loc=0.,scale=self.hyper['alpha'])
-            K=K-prior.log_prob(par[var])
-        return K
+            means=nd.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=nd.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
+            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
+        return log_prior
        
     def negative_log_likelihood(self,par,**args):
         for k,v in args.items():
@@ -38,11 +40,12 @@ class linear():
             elif k=='y_train':
                 y=nd.array(v,ctx=self.ctx)
         y_hat = self.forward(par,X_train=X)
-        return -nd.sum(y_hat.log_prob(y).as_nd_ndarray())
+        return -nd.mean(y_hat.log_prob(y).as_nd_ndarray())
         
     def loss(self,par,**args):
-        return self.negative_log_likelihood(par,**args)
-    
+        log_like=self.negative_log_likelihood(par,**args)
+        log_prior=self.negative_log_prior(par,**args)
+        return log_like+log_prior
 
 class linear_aleatoric(linear):
 
