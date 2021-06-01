@@ -42,7 +42,7 @@ class hmc(base):
         q_new = deepcopy(q)
         p_new = self.draw_momentum(rng)
         epsilon=float(self.step_size)
-        clip  = lambda val :  max(min(100,val),2)
+        clip  = lambda val :  max(min(300,val),2)
         L=clip(np.ceil(path_length/epsilon))
         for var in q_new.keys():
             q_new[var].attach_grad()
@@ -50,7 +50,7 @@ class hmc(base):
             loss = self.model.loss(q_new,**args)
         loss.backward()
         for var in q_new.keys():
-            p_new[var]-= (0.5*epsilon)*q_new[var].grad     
+            p_new[var]-= (0.5*epsilon)*q_new[var].grad  
         # leapfrog step 
         for _ in range(int(L-1)):
             for var in self.start.keys():
