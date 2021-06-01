@@ -12,6 +12,30 @@ class softmax():
         self.hyper=_hyper
         self.ctx=ctx
         self.LOG2PI = np.log(2.0 * np.pi)
+        self.par = dict()
+        self.net = self.init_net()
+        
+        
+        
+    def init_net(self):
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        #net.add(gluon.nn.Dense(128, activation="relu"))#primera capa
+        #net.add(gluon.nn.Dense(64, activation="relu"))#segunda capa
+        net.add(gluon.nn.Dense(10))#capa de salida
+        #print(type(net))
+        #print(type(net.collect_params()))
+        net.initialize(mx.init.Xavier(magnitude=2.24), ctx=self.ctx)
+        net.collect_params()
+        x = nd.random.uniform(shape=(1,784))
+        net.forward(x)
+        for name,gluon_par in net.collect_params().items():
+            self.par.update({name:gluon_par.data()})
+        #print(net.collect_params())
+        #print(net[0].params)
+        #print(net[0].bias)
+        #print(net[0].bias.data())
+        #print(net[0].weight.grad())
+        return net
 
         
     def softmax(self, y_linear):
@@ -27,7 +51,11 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v
-        y_linear = nd.dot(X, par['weights']) + par['bias']
+        #y_linear = nd.dot(X, par['weights']) + par['bias']
+        X = X.as_in_context(self.ctx).reshape((-1,784))
+        for name,gluon_par in self.net.collect_params().items():
+            gluon_par.set_data(self.par[name])
+        y_linear = self.net.forward(X)
         yhat = self.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
