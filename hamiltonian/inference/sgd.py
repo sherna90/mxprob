@@ -51,7 +51,7 @@ class sgd(base):
             verbose=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=deepcopy(self.model.par)
+        par=self.model.par
         for var in self.model.par.keys():
             par[var].attach_grad()
         momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
