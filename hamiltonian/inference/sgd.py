@@ -17,7 +17,7 @@ class sgd(base):
             verbose=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=deepcopy(self.start)
+        par=deepcopy(self.model.par)
         for var in par.keys():
             par[var].attach_grad()
         sgd = mx.optimizer.Optimizer.create_optimizer('sgd',
@@ -51,8 +51,8 @@ class sgd(base):
             verbose=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=deepcopy(self.start)
-        for var in par.keys():
+        par=deepcopy(self.model.par)
+        for var in self.model.par.keys():
             par[var].attach_grad()
         momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
         for i in tqdm(range(epochs)):

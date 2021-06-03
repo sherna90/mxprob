@@ -8,34 +8,20 @@ import mxnet.gluon.probability as mxp
 
 class softmax():
     
-    def __init__(self,_hyper,ctx=mx.cpu()):
+    def __init__(self,_hyper,in_units,out_units,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
-        self.LOG2PI = np.log(2.0 * np.pi)
-        self.par = dict()
-        self.net = self.init_net()
+        self.net,self.par  = self._init_net(in_units,out_units)
         
-        
-        
-    def init_net(self):
+    def _init_net(self,in_units,out_units):
         net = gluon.nn.Sequential()#inicializacion api sequencial
-        #net.add(gluon.nn.Dense(128, activation="relu"))#primera capa
-        #net.add(gluon.nn.Dense(64, activation="relu"))#segunda capa
-        net.add(gluon.nn.Dense(10))#capa de salida
-        #print(type(net))
-        #print(type(net.collect_params()))
-        net.initialize(mx.init.Xavier(magnitude=2.24), ctx=self.ctx)
-        net.collect_params()
-        x = nd.random.uniform(shape=(1,784))
-        net.forward(x)
+        net.add(gluon.nn.Dense(out_units,in_units=in_units))#capa de salida
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=dict()
         for name,gluon_par in net.collect_params().items():
-            self.par.update({name:gluon_par.data()})
-        #print(net.collect_params())
-        #print(net[0].params)
-        #print(net[0].bias)
-        #print(net[0].bias.data())
-        #print(net[0].weight.grad())
-        return net
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par
 
         
     def softmax(self, y_linear):
@@ -50,12 +36,11 @@ class softmax():
     def forward(self,par, **args):
         for k,v in args.items():
             if k=='X_train':
-                X=v
-        #y_linear = nd.dot(X, par['weights']) + par['bias']
-        X = X.as_in_context(self.ctx).reshape((-1,784))
+                X=nd.array(v,ctx=self.ctx)
         for name,gluon_par in self.net.collect_params().items():
-            gluon_par.set_data(self.par[name])
+            gluon_par.set_data(par[name])
         y_linear = self.net.forward(X)
+        #y_linear = nd.dot(X, nd.transpose(par['0.weight'])) + par['0.bias']
         yhat = self.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
