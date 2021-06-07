@@ -17,7 +17,7 @@ class sgd(base):
             verbose=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=deepcopy(self.model.par)
+        par=self.model.par
         for var in par.keys():
             par[var].attach_grad()
         sgd = mx.optimizer.Optimizer.create_optimizer('sgd',

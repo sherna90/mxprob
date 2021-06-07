@@ -80,3 +80,25 @@ class hierarchical_softmax(softmax):
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
             log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
         return log_prior
+
+class mlp_softmax(softmax):
+    
+    def __init__(self,_hyper,in_units,out_units,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.net,self.par  = self._init_net(in_units,out_units)
+        
+    def _init_net(self,in_units,out_units):
+        n_hidden=64
+        n_layers=2
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net.add(gluon.nn.Dense(n_hidden,in_units=in_units))#capa de entrada
+        for _ in range(n_layers):
+            net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='relu'))#capa de entrada
+        net.add(gluon.nn.Dense(out_units,in_units=n_hidden))#capa de entrada
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=dict()
+        for name,gluon_par in net.collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par
