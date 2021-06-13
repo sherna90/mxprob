@@ -33,4 +33,5 @@ class base:
         #return initial_step_size - (decay_factor*step/num_batches)
 
     def loss(self,par,X_train,y_train):
-        return self.model.loss(par,X_train=X_train,y_train=y_train)
+        batch_size=X_train.shape[0]
+        return self.model.loss(par,X_train=X_train,y_train=y_train)/batch_size
