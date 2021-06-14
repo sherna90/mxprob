@@ -62,7 +62,7 @@ class bbb(base):
             elif k=='y_train':
                 y_train=v
         num_batches=n_data/batch_size
-        nll=self.model.loss(par,X_train=X_train,y_train=y_train)
+        nll=self.model.loss(par,X_train=X_train,y_train=y_train)*1/batch_size
         log_var_posterior=list()
         for var in par.keys():
             variational_posterior=mxp.normal.Normal(loc=means[var],scale=self.softplus(sigmas[var]))
