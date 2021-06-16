@@ -1,16 +1,28 @@
 import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
+from mxnet.ndarray import clip
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
 
 class sgd(base):
 
+    def _get_loader(self,**args):
+        data_loader=None
+        n_examples=0
+        if 'X_train' in args and 'y_train' in args:
+            X=args['X_train']
+            y=args['y_train']
+            n_examples=X.shape[0]
+            data_loader=self.iterate_minibatches(X, y,batch_size)
+        elif 'data_loader' in args:
+            data_loader=args['data_loader']
+            n_examples=len(data_loader)
+        return data_loader,n_examples
+
     def fit_gluon(self,epochs=1,batch_size=1,**args):
-        X=args['X_train']
-        y=args['y_train']
-        n_examples=X.shape[0]
+        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -29,8 +41,9 @@ class sgd(base):
             indices.append(i)
         for i in tqdm(range(epochs)):
             cumulative_loss=0
-            j=0
-            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+            for X_batch, y_batch in data_loader:
+                X_batch=X_batch.as_in_context(self.ctx)
+                y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
@@ -42,9 +55,7 @@ class sgd(base):
         return par,loss_val
 
     def fit(self,epochs=1,batch_size=1,**args):
-        X=args['X_train']
-        y=args['y_train']
-        n_examples=X.shape[0]
+        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -58,7 +69,9 @@ class sgd(base):
         for i in tqdm(range(epochs)):
             cumulative_loss=0
             j=0
-            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+            for X_batch, y_batch in data_loader:
+                X_batch=X_batch.as_in_context(self.ctx)
+                y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
@@ -72,7 +85,8 @@ class sgd(base):
     
     def step(self,batch_size,momentum,par):
         for var in par.keys():
-            grad_norm=nd.norm(par[var].grad)
-            momentum[var][:] = self.gamma * momentum[var] + self.step_size * par[var].grad /grad_norm #calcula para parametros peso y bias
+            grad = clip(par[var].grad, -1e3,1e3)
+            #grad_norm=nd.norm(par[var].grad)
+            momentum[var][:] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
             par[var][:]=par[var]-momentum[var]
         return momentum, par

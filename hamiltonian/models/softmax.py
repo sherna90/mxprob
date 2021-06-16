@@ -106,13 +106,12 @@ class mlp_softmax(softmax):
 
 class resnet_softmax(softmax):
     
-    def __init__(self,_hyper,in_units,out_units,n_layers,pre_trained=False,init_shape,ctx=mx.cpu()):
+    def __init__(self,_hyper,in_units=(32,32),out_units=10,n_layers=18,pre_trained=False,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
         self.version=2
         #n_layers = 18, 34, 50, 101, 152.
         self.pre_trained=pre_trained
-        self.init_shape
         self.net,self.par  = self._init_net(in_units,out_units,n_layers)
         
     def _init_net(self,in_units,out_units,n_layers):
@@ -121,7 +120,7 @@ class resnet_softmax(softmax):
         net.add(model.features[:-1])
         net.add(gluon.nn.Dense(out_units,in_units=512))#capa de salida
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        data = nd.ones((1,3,self.init_shape[0],self.init_shape[1]))
+        data = nd.ones((1,3,in_units[0],in_units[1]))
         net(data.as_in_context(self.ctx))
         par=dict()
         for name,gluon_par in net.collect_params().items():
