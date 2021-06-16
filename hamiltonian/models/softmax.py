@@ -6,6 +6,9 @@ import mxnet as mx
 from mxnet import nd, autograd, gluon
 import mxnet.gluon.probability as mxp
 
+from mxnet.gluon.model_zoo.vision import resnet 
+               
+
 class softmax():
     
     def __init__(self,_hyper,in_units,out_units,ctx=mx.cpu()):
@@ -95,6 +98,31 @@ class mlp_softmax(softmax):
             net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='relu'))#capa de entrada
         net.add(gluon.nn.Dense(out_units,in_units=n_hidden))#capa de entrada
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=dict()
+        for name,gluon_par in net.collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par
+
+class resnet_softmax(softmax):
+    
+    def __init__(self,_hyper,in_units,out_units,n_layers,pre_trained=False,init_shape,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.version=2
+        #n_layers = 18, 34, 50, 101, 152.
+        self.pre_trained=pre_trained
+        self.init_shape
+        self.net,self.par  = self._init_net(in_units,out_units,n_layers)
+        
+    def _init_net(self,in_units,out_units,n_layers):
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        model=resnet.get_resnet(self.version,n_layers,pretrained=self.pre_trained,ctx=self.ctx)
+        net.add(model.features[:-1])
+        net.add(gluon.nn.Dense(out_units,in_units=512))#capa de salida
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        data = nd.ones((1,3,self.init_shape[0],self.init_shape[1]))
+        net(data.as_in_context(self.ctx))
         par=dict()
         for name,gluon_par in net.collect_params().items():
             par.update({name:gluon_par.data()})
