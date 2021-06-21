@@ -8,18 +8,6 @@ from hamiltonian.inference.base import base
 
 class sgd(base):
 
-    def _get_loader(self,**args):
-        data_loader=None
-        n_examples=0
-        if 'X_train' in args and 'y_train' in args:
-            X=args['X_train']
-            y=args['y_train']
-            n_examples=X.shape[0]
-            data_loader=self.iterate_minibatches(X, y,batch_size)
-        elif 'data_loader' in args:
-            data_loader=args['data_loader']
-            n_examples=len(data_loader)
-        return data_loader,n_examples
 
     def fit_gluon(self,epochs=1,batch_size=1,**args):
         data_loader,n_examples=self._get_loader(**args)

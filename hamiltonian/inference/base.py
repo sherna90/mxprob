@@ -14,6 +14,19 @@ class base:
         self.ctx=ctx
         self.gamma=0.9
         
+    def _get_loader(self,**args):
+        data_loader=None
+        n_examples=0
+        if 'X_train' in args and 'y_train' in args:
+            X=args['X_train']
+            y=args['y_train']
+            n_examples=X.shape[0]
+            batch_size=64
+            data_loader=self.iterate_minibatches(X, y,batch_size)
+        elif 'data_loader' in args:
+            data_loader=args['data_loader']
+            n_examples=len(data_loader)
+        return data_loader,n_examples
 
     def iterate_minibatches(self, X, y, batchsize):
         assert X.shape[0] == y.shape[0]

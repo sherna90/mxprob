@@ -8,9 +8,11 @@ from hamiltonian.inference.base import base
 class sgld(base):
 
     def fit_gluon(self,epochs=1,batch_size=1,**args):
-        X=args['X_train']
-        y=args['y_train']
-        n_examples=X.shape[0]
+        data_loader,n_examples=self._get_loader(**args)
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -30,7 +32,9 @@ class sgld(base):
         for i in tqdm(range(epochs)):
             cumulative_loss=0
             j=0
-            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+            for X_batch, y_batch in data_loader:
+                X_batch=X_batch.as_in_context(self.ctx)
+                y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(self.model.par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
@@ -44,9 +48,7 @@ class sgld(base):
         return self.model.par,loss_val,samples
 
     def fit(self,epochs=1,batch_size=1,**args):
-        X=args['X_train']
-        y=args['y_train']
-        n_examples=X.shape[0]
+        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -59,7 +61,9 @@ class sgld(base):
         samples={var:[] for var in self.model.par.keys()}
         for i in tqdm(range(epochs)):
             cumulative_loss=0
-            for X_batch, y_batch in self.iterate_minibatches(X, y,batch_size):
+            for X_batch, y_batch in data_loader:
+                X_batch=X_batch.as_in_context(self.ctx)
+                y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(self.model.par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
