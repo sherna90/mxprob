@@ -10,7 +10,6 @@ class sgd(base):
 
 
     def fit_gluon(self,epochs=1,batch_size=1,**args):
-        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -28,6 +27,7 @@ class sgd(base):
             states.append(sgd.create_state(i,par[var]))
             indices.append(i)
         for i in tqdm(range(epochs)):
+            data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
@@ -43,7 +43,6 @@ class sgd(base):
         return par,loss_val
 
     def fit(self,epochs=1,batch_size=1,**args):
-        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -55,6 +54,7 @@ class sgd(base):
             par[var].attach_grad()
         momentum={var:nd.zeros_like(par[var]) for var in par.keys()}
         for i in tqdm(range(epochs)):
+            data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             j=0
             for X_batch, y_batch in data_loader:
