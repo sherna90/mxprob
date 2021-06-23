@@ -12,10 +12,10 @@ class sgld(base):
             verbose=args['verbose']
         else:
             verbose=None
-        if 'verbose' in args:
-            verbose=args['verbose']
+        if 'chain_name' in args:
+            chain_name=args['chain_name']
         else:
-            verbose=None
+            chain_name='chain_'+str(np.random.randint(1000)) 
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         for var in self.model.par.keys():
@@ -24,7 +24,7 @@ class sgld(base):
             learning_rate=self.step_size,rescale_grad=1./batch_size)
         states=list()
         indices=list()
-        samples={var:[] for var in self.model.par.keys()}
+        samples=list()
         for i,var in enumerate(self.model.par.keys()):
             states.append(sgld.create_state(i,self.model.par[var]))
             indices.append(i)
@@ -43,10 +43,9 @@ class sgld(base):
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-            file_name='sgld_epoch_'+i+'_.params'
+            file_name=chain_name+'_sgld_epoch_'+str(i)+'_.params'
             self.model.net.save_parameters(file_name)
-            for var in self.model.par.keys():
-                samples[var].append(self.model.par[var])
+            samples.append(samples[var].append(file_name))
         return self.model.par,loss_val,samples
 
     def fit(self,epochs=1,batch_size=1,**args):
@@ -54,12 +53,16 @@ class sgld(base):
             verbose=args['verbose']
         else:
             verbose=None
+        if 'chain_name' in args:
+            chain_name=args['chain_name']
+        else:
+            chain_name='chain_'+str(np.random.randint(1000)) 
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         for var in self.model.par.keys():
             self.model.par[var].attach_grad()
         j=0
-        samples={var:[] for var in self.model.par.keys()}
+        samples=list()
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -75,10 +78,9 @@ class sgld(base):
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
-            #file_name='sgld_epoch_'+i+'_.params'
-            #self.model.net.save_parameters(file_name)
-            for var in self.model.par.keys():
-                samples[var].append(self.model.par[var])
+            file_name=chain_name+'_sgld_epoch_'+str(i)+'_.params'
+            self.model.net.save_parameters(file_name)
+            samples.append(file_name)
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         return self.model.par,loss_val,samples
@@ -100,28 +102,32 @@ class sgld(base):
         posterior_samples=list()
         for i in range(chains):
             _,_,samples=self.fit(epochs=epochs,batch_size=batch_size,**args)
-            posterior_samples_chain=dict()
+            """ posterior_samples_chain=dict()
             for var in samples.keys():
                 posterior_samples_chain.update(
                     {var:np.expand_dims(np.asarray(
                         [sample.asnumpy() for sample in samples[var]]),0)
                     })
-            posterior_samples.append(posterior_samples_chain)
+            posterior_samples.append(posterior_samples_chain) """
         return posterior_samples
 
-    def predict(self,par,num_samples=100,**args):
-        data_loader,n_examples=self._get_loader(**args)
-        total_labels=[]
+    def predict(self,posterior_samples,num_samples,**args):
+        data_loader,_=self._get_loader(**args)
         total_samples=[]
-        for X_test,y_test in data_loader:
-            X_test=X_test.as_in_context(self.ctx)
-            y_hat=self.model.predict(par,X_test)
-            if X_test.shape[0]==batch_size:
-                samples=[]
-                for _ in range(num_samples):
-                    samples.append(y_hat.sample().asnumpy())
-                total_samples.append(np.asarray(samples))
-                total_labels.append(y_test.asnumpy())
-        total_samples=np.concatenate(total_samples,axis=1)
-        total_labels=np.concatenate(total_labels)
-        return total_samples,total_labels    
+        num_samples=len(posterior_samples)
+        for i in range(num_samples):
+            samples=[]
+            labels=[]
+            self.model.net.load_parameters(posterior_samples[i],ctx=self.ctx)
+            par=dict()
+            for name,gluon_par in self.model.net.collect_params().items():
+                par.update({name:gluon_par.data()})
+            for X_test,y_test in data_loader:
+                X_test=X_test.as_in_context(self.ctx)
+                y_pred=self.model.predict(par,X_test)
+                samples.append(y_pred.sample().asnumpy())
+                labels.append(y_test.asnumpy())
+            total_samples.append(np.concatenate(samples))
+            total_labels=np.concatenate(labels)
+        total_samples=np.stack(total_samples)
+        return total_samples,total_labels
