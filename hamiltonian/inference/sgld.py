@@ -8,7 +8,6 @@ from hamiltonian.inference.base import base
 class sgld(base):
 
     def fit_gluon(self,epochs=1,batch_size=1,**args):
-        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -30,6 +29,7 @@ class sgld(base):
             states.append(sgld.create_state(i,self.model.par[var]))
             indices.append(i)
         for i in tqdm(range(epochs)):
+            data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             j=0
             for X_batch, y_batch in data_loader:
@@ -50,7 +50,6 @@ class sgld(base):
         return self.model.par,loss_val,samples
 
     def fit(self,epochs=1,batch_size=1,**args):
-        data_loader,n_examples=self._get_loader(**args)
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -62,6 +61,7 @@ class sgld(base):
         j=0
         samples={var:[] for var in self.model.par.keys()}
         for i in tqdm(range(epochs)):
+            data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
@@ -107,4 +107,21 @@ class sgld(base):
                         [sample.asnumpy() for sample in samples[var]]),0)
                     })
             posterior_samples.append(posterior_samples_chain)
-        return posterior_samples   
+        return posterior_samples
+
+    def predict(self,par,num_samples=100,**args):
+        data_loader,n_examples=self._get_loader(**args)
+        total_labels=[]
+        total_samples=[]
+        for X_test,y_test in data_loader:
+            X_test=X_test.as_in_context(self.ctx)
+            y_hat=self.model.predict(par,X_test)
+            if X_test.shape[0]==batch_size:
+                samples=[]
+                for _ in range(num_samples):
+                    samples.append(y_hat.sample().asnumpy())
+                total_samples.append(np.asarray(samples))
+                total_labels.append(y_test.asnumpy())
+        total_samples=np.concatenate(total_samples,axis=1)
+        total_labels=np.concatenate(total_labels)
+        return total_samples,total_labels    

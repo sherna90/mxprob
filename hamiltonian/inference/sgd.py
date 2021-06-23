@@ -79,4 +79,19 @@ class sgd(base):
             par[var][:]=par[var]-momentum[var]
         return momentum, par
 
-    
+    def predict(self,par,batch_size=64,num_samples=100,**args):
+        data_loader,n_examples=self._get_loader(**args)
+        total_labels=[]
+        total_samples=[]
+        for X_test,y_test in data_loader:
+            X_test=X_test.as_in_context(self.ctx)
+            y_hat=self.model.predict(par,X_test)
+            if X_test.shape[0]==batch_size:
+                samples=[]
+                for _ in range(num_samples):
+                    samples.append(y_hat.sample().asnumpy())
+                total_samples.append(np.asarray(samples))
+                total_labels.append(y_test.asnumpy())
+        total_samples=np.concatenate(total_samples,axis=1)
+        total_labels=np.concatenate(total_labels)
+        return total_samples,total_labels   
