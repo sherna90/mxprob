@@ -78,3 +78,5 @@ class sgd(base):
             momentum[var][:] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
             par[var][:]=par[var]-momentum[var]
         return momentum, par
+
+    

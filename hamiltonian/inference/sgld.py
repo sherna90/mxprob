@@ -43,6 +43,8 @@ class sgld(base):
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
+            file_name='sgld_epoch_'+i+'_.params'
+            self.model.net.save_parameters(file_name)
             for var in self.model.par.keys():
                 samples[var].append(self.model.par[var])
         return self.model.par,loss_val,samples
@@ -73,6 +75,8 @@ class sgld(base):
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
+            #file_name='sgld_epoch_'+i+'_.params'
+            #self.model.net.save_parameters(file_name)
             for var in self.model.par.keys():
                 samples[var].append(self.model.par[var])
             if verbose and (i%(epochs/10)==0):
@@ -91,3 +95,16 @@ class sgld(base):
             ctx=self.ctx,
             dtype=par[var].dtype) for var in par.keys()}
         return momentum
+
+    def sample(self,epochs=1,batch_size=1,chains=2,verbose=False,**args):
+        posterior_samples=list()
+        for i in range(chains):
+            _,_,samples=self.fit(epochs=epochs,batch_size=batch_size,**args)
+            posterior_samples_chain=dict()
+            for var in samples.keys():
+                posterior_samples_chain.update(
+                    {var:np.expand_dims(np.asarray(
+                        [sample.asnumpy() for sample in samples[var]]),0)
+                    })
+            posterior_samples.append(posterior_samples_chain)
+        return posterior_samples   

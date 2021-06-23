@@ -13,18 +13,20 @@ class hmc(base):
     def fit(self,epochs=100,burn_in=30,path_length=1.0,verbose=False,rng=None,**args):
         if rng == None:
             rng = mx.random.seed(seed_state=np.random.random_integers(0,100),ctx=self.ctx)
-        q,p=self.start,self.draw_momentum(rng)
+        q,p=self.model.par,self.draw_momentum(rng)
         loss=np.zeros(int(epochs))
         rate=list()
         epsilons=list()
         samples={var:[] for var in self.start.keys()}
         step_size_tuning = DualAveragingStepSize(initial_step_size=self.step_size)
         for idx in tqdm(range(int(epochs+burn_in))):
+            q_old= {par:val.copy() for par,val in q.items()}
+            p_old= {par:val.copy() for par,val in p.items()}
             q_new,p_new=self.step(q,p,path_length,rng,**args)
-            acceptprob = self.accept(q, q_new, p, p_new,**args)
+            acceptprob = self.accept(q_old, q_new, p_old, p_new,**args)
             if acceptprob and (np.random.rand() < acceptprob): 
-                q = q_new.copy()
-                p = p_new.copy()
+                q = {par:val.copy() for par,val in q_new.items()}
+                p = {par:val.copy() for par,val in p_new.items()}
             # Tuning routine
             if idx < burn_in - 1:
                 self.step_size, _ = step_size_tuning.tune(acceptprob)
@@ -37,43 +39,44 @@ class hmc(base):
         return samples,rate
 
     def step(self,state,momentum,path_length, rng,**args):
-        q = state.copy()
-        p = momentum.copy()
-        q_new = deepcopy(q)
+        q = state
+        p = momentum
+        q_new = {par:val.copy() for par,val in q.items()}
         p_new = self.draw_momentum(rng)
         epsilon=float(self.step_size)
-        clip  = lambda val :  max(min(300,val),2)
+        clip  = lambda val :  max(min(100,val),2)
         L=clip(np.ceil(path_length/epsilon))
         for var in q_new.keys():
             q_new[var].attach_grad()
         with autograd.record():
-            loss = self.model.loss(q_new,**args)
+            loss = self.loss(q_new,**args)
         loss.backward()
         for var in q_new.keys():
-            p_new[var]-= (0.5*epsilon)*q_new[var].grad  
+            p_new[var][:]= p_new[var]-(0.5*epsilon)*q_new[var].grad  
         # leapfrog step 
         for _ in range(int(L-1)):
             for var in self.start.keys():
-                q_new[var]+= epsilon*p_new[var]
+                q_new[var][:]= q_new[var]+epsilon*p_new[var]
             with autograd.record():
-                loss = self.model.loss(q_new,**args)
+                loss = self.loss(q_new,**args)
             loss.backward()
             for var in self.start.keys():
-                p_new[var]-= (0.5*epsilon)*q_new[var].grad
+                p_new[var][:]= p_new[var]-(0.5*epsilon)*q_new[var].grad  
         for var in self.start.keys():
-            q_new[var]+= epsilon*p_new[var]
+            q_new[var][:]= q_new[var]+epsilon*p_new[var]
         with autograd.record():
-            loss = self.model.loss(q_new,**args)
+            loss = self.loss(q_new,**args)
+        loss.backward()
         for var in self.start.keys():
-            p_new[var]-= epsilon*q_new[var].grad
+            p_new[var][:]= p_new[var]-(0.5*epsilon)*q_new[var].grad  
             p_new[var]=-p_new[var]
         return q_new,p_new
 
 
     def accept(self,current_q, proposal_q, current_p, proposal_p,**args):
-        E_proposal = (self.model.loss(proposal_q,**args)+self.potential_energy(proposal_p))
-        E_current = (self.model.loss(current_q,**args)+self.potential_energy(current_p))
-        A = min(1.,nd.exp(E_proposal-E_current).asnumpy())
+        E_proposal = (self.loss(proposal_q,**args)+self.potential_energy(proposal_p))
+        E_current = (self.loss(current_q,**args)+self.potential_energy(current_p))
+        A = min(1,nd.exp(E_proposal-E_current).asnumpy()[0])
         return A
 
 
@@ -83,7 +86,7 @@ class hmc(base):
             means=nd.zeros(momentum[var].shape,ctx=self.ctx)
             sigmas=nd.ones(momentum[var].shape,ctx=self.ctx)
             param=mxp.normal.Normal(loc=means,scale=sigmas)
-            K-=nd.mean(param.log_prob(momentum[var]).as_nd_ndarray())
+            K-=nd.sum(param.log_prob(momentum[var]).as_nd_ndarray())
         return K
 
 
@@ -93,6 +96,22 @@ class hmc(base):
             ctx=self.ctx,
             dtype=self.start[var].dtype) for var in self.start.keys()}
         return momentum
+
+    def sample(self,epochs=100,burn_in=30,path_length=1.0,chains=2,verbose=False,**args):
+        rng=[mx.random.seed(seed_state=np.random.random_integers(0,100),ctx=self.ctx)
+                for i in range(chains)]
+        posterior_samples=list()
+        for i in range(chains):
+            samples,_=self.fit(epochs=epochs,burn_in=burn_in,
+                path_length=path_length,verbose=False,rng=rng[i],**args)
+            posterior_samples_chain=dict()
+            for var in samples.keys():
+                posterior_samples_chain.update(
+                    {var:np.expand_dims(np.asarray(
+                        [sample.asnumpy() for sample in samples[var]]),0)
+                    })
+            posterior_samples.append(posterior_samples_chain)
+        return posterior_samples   
 
 
         
