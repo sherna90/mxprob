@@ -18,7 +18,8 @@ class softmax():
         
     def _init_net(self,in_units,out_units):
         net = gluon.nn.Sequential()#inicializacion api sequencial
-        net.add(gluon.nn.Dense(out_units,in_units=in_units))#capa de salida
+        net.add(gluon.nn.Flatten())
+        net.add(gluon.nn.Dense(out_units,in_units=in_units[0]*in_units[1]))#capa de salida
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         par=dict()
         for name,gluon_par in net.collect_params().items():
@@ -139,9 +140,9 @@ class lenet(softmax):
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(
             gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='sigmoid'),
-            gluon.nn.AvgPool2D(pool_size=2, strides=2),
+            #gluon.nn.AvgPool2D(pool_size=2, strides=2),
             gluon.nn.Conv2D(channels=16, kernel_size=5, activation='sigmoid'),
-            gluon.nn.AvgPool2D(pool_size=2, strides=2),
+            #gluon.nn.AvgPool2D(pool_size=2, strides=2),
             # `Dense` will transform an input of the shape (batch size, number of
             # channels, height, width) into an input of the shape (batch size,
             # number of channels * height * width) automatically by default

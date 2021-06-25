@@ -1,6 +1,7 @@
 import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon,random
+from mxnet.ndarray import clip
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
@@ -45,7 +46,7 @@ class sgld(base):
                 print('loss: {0:.4f}'.format(loss_val[i]))
             file_name=chain_name+'_sgld_epoch_'+str(i)+'_.params'
             self.model.net.save_parameters(file_name)
-            samples.append(samples[var].append(file_name))
+            samples.append(file_name)
         return self.model.par,loss_val,samples
 
     def fit(self,epochs=1,batch_size=1,**args):
@@ -59,8 +60,9 @@ class sgld(base):
             chain_name='chain_'+str(np.random.randint(1000)) 
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
+        par=self.model.par
         for var in self.model.par.keys():
-            self.model.par[var].attach_grad()
+            par[var].attach_grad()
         j=0
         samples=list()
         for i in tqdm(range(epochs)):
@@ -70,11 +72,11 @@ class sgld(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(self.model.par,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 epsilon=self.step_size*((30 + j) ** (-0.55))
                 momentum=self.draw_momentum(self.model.par,epsilon)
-                _,self.model.par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
+                momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
@@ -83,13 +85,14 @@ class sgld(base):
             samples.append(file_name)
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-        return self.model.par,loss_val,samples
+        return par,loss_val,samples
 
     def step(self,n_data,batch_size,momentum,epsilon,par):
-        for name,par_new in par.items():
-            momentum[name][:]=  momentum[name] - (0.5  * epsilon  * (n_data//batch_size) * par[name].grad)
-            par[name][:]=par_new + momentum[name]
-        return momentum, self.model.par
+        for var in par.keys():
+            grad = clip(par[var].grad, -1e3,1e3)
+            momentum[var][:] =  momentum[var] + (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
+            par[var][:]=par[var]-momentum[var]
+        return momentum, par
 
     def draw_momentum(self,par,epsilon):
         momentum={var:np.sqrt(epsilon)*random.normal(0,1,
@@ -100,8 +103,12 @@ class sgld(base):
 
     def sample(self,epochs=1,batch_size=1,chains=2,verbose=False,**args):
         posterior_samples=list()
+        loss_values=list()
         for i in range(chains):
-            _,_,samples=self.fit(epochs=epochs,batch_size=batch_size,**args)
+            _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,verbose=verbose,**args)
+            self.model.net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            for name,gluon_par in self.model.net.collect_params().items():
+                self.model.par.update({name:gluon_par.data()})
             """ posterior_samples_chain=dict()
             for var in samples.keys():
                 posterior_samples_chain.update(
@@ -109,7 +116,9 @@ class sgld(base):
                         [sample.asnumpy() for sample in samples[var]]),0)
                     })
             posterior_samples.append(posterior_samples_chain) """
-        return posterior_samples
+            posterior_samples.append(samples)
+            loss_values.append(loss)
+        return loss_values,posterior_samples
 
     def predict(self,posterior_samples,num_samples,**args):
         data_loader,_=self._get_loader(**args)
