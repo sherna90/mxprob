@@ -102,6 +102,9 @@ class hmc(base):
                 for i in range(chains)]
         posterior_samples=list()
         for i in range(chains):
+            self.model.net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            for name,gluon_par in self.model.net.collect_params().items():
+                self.model.par.update({name:gluon_par.data()})
             samples,_=self.fit(epochs=epochs,burn_in=burn_in,
                 path_length=path_length,verbose=False,rng=rng[i],**args)
             posterior_samples_chain=dict()

@@ -82,7 +82,7 @@ class hierarchical_softmax(softmax):
             means=nd.zeros(par[var].shape,ctx=self.ctx)
             sigmas=1./prior.sample(par[var].shape).copyto(self.ctx)
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
-            log_prior=log_prior-nd.sum(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.sum(prior.log_prob(sigmas).as_nd_ndarray())
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
         return log_prior
 
 class mlp_softmax(softmax):

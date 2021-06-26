@@ -140,3 +140,16 @@ class sgld(base):
             total_labels=np.concatenate(labels)
         total_samples=np.stack(total_samples)
         return total_samples,total_labels
+
+    def posterior_diagnostics(self,posterior_samples):
+        chains=len(posterior_samples)
+        posterior_samples_multiple_chains=list()
+        for i in range(chains):
+            single_chain={var:list() for var in self.model.par}
+            for file in posterior_samples[i]:
+                self.model.net.load_parameters(file,ctx=self.ctx)
+                for name,par in self.model.net.collect_params().items():
+                    single_chain[name].append(par.data().asnumpy())
+            posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
+            posterior_samples_multiple_chains.append(posterior_samples_single_chain)
+        return posterior_samples_multiple_chains
