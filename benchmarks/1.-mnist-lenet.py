@@ -21,7 +21,7 @@ sns.set_style("whitegrid")
 import mxnet as mx
 from hamiltonian.inference.sgd import sgd
 from hamiltonian.inference.sgld import sgld
-from hamiltonian.models.softmax import softmax,hierarchical_softmax
+from hamiltonian.models.softmax import softmax,hierarchical_softmax,lenet
 
 from sklearn.metrics import classification_report
 import arviz as az
@@ -54,7 +54,7 @@ out_units=10
 
 
 
-model=softmax(hyper,in_units,out_units,ctx=model_ctx)
+model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
 
 
@@ -83,12 +83,11 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 
 # # Stochastic Gradient Langevin Dynamics Softmax <a class="anchor" id="chapter2"></a>
-print('#####################################################################################')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                              data_loader=train_data,
-                             verbose=True,chain_name='chain_nonhierarchical')
+                             verbose=True,chain='chain_nonhierarchical')
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -133,7 +132,7 @@ model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                              data_loader=train_data,
-                             verbose=True,chain_name='chain_hierarchical')
+                             verbose=True,chain='chain_hierarchical')
 
 import matplotlib.pyplot as plt
 import seaborn as sns

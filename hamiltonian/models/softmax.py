@@ -140,9 +140,9 @@ class lenet(softmax):
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(
             gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='sigmoid'),
-            #gluon.nn.AvgPool2D(pool_size=2, strides=2),
+            gluon.nn.AvgPool2D(pool_size=2, strides=2),
             gluon.nn.Conv2D(channels=16, kernel_size=5, activation='sigmoid'),
-            #gluon.nn.AvgPool2D(pool_size=2, strides=2),
+            gluon.nn.AvgPool2D(pool_size=2, strides=2),
             # `Dense` will transform an input of the shape (batch size, number of
             # channels, height, width) into an input of the shape (batch size,
             # number of channels * height * width) automatically by default
@@ -157,3 +157,15 @@ class lenet(softmax):
             par.update({name:gluon_par.data()})
             gluon_par.grad_req='null'
         return net,par
+    
+class hierarchical_lenet(lenet):
+    
+    def negative_log_prior(self, par,**args):
+        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        prior=mxp.Gamma(shape=1.0,scale=1.0)
+        for var in par.keys():
+            means=nd.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=1./prior.sample(par[var].shape).copyto(self.ctx)
+            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
+        return log_prior

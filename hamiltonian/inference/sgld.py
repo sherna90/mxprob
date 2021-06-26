@@ -105,17 +105,13 @@ class sgld(base):
         posterior_samples=list()
         loss_values=list()
         for i in range(chains):
-            _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,verbose=verbose,**args)
+            if 'chain_name' in args:
+                args['chain_name']=args['chain_name']+"_"+str(i)
+            _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,
+                verbose=verbose,**args)
             self.model.net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
             for name,gluon_par in self.model.net.collect_params().items():
                 self.model.par.update({name:gluon_par.data()})
-            """ posterior_samples_chain=dict()
-            for var in samples.keys():
-                posterior_samples_chain.update(
-                    {var:np.expand_dims(np.asarray(
-                        [sample.asnumpy() for sample in samples[var]]),0)
-                    })
-            posterior_samples.append(posterior_samples_chain) """
             posterior_samples.append(samples)
             loss_values.append(loss)
         return loss_values,posterior_samples
