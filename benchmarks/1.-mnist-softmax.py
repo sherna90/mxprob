@@ -33,8 +33,8 @@ transform = transforms.Compose([
 
 num_gpus = 1
 model_ctx = mx.gpu()
-num_epochs=10
-num_workers = 8
+num_epochs=250
+num_workers = 2
 batch_size = 64 
 train_sgd=False
 
@@ -134,11 +134,6 @@ inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                              data_loader=train_data,
                              verbose=True,chain_name='chain_hierarchical')
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-plt.rcParams['figure.dpi'] = 360
-sns.set_style("whitegrid")
 
 
 fig=plt.figure(figsize=[5,5])
