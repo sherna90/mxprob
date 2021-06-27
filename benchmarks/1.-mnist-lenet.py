@@ -32,11 +32,11 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 1
-model_ctx = mx.gpu()
+model_ctx = mx.cpu()
 num_epochs=10
-num_workers = 8
+num_workers = 0
 batch_size = 64 
-train_sgd=False
+train_sgd=True
 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -60,7 +60,7 @@ inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
 
 
 if train_sgd:
-    par,loss=inference.fit(epochs=100,batch_size=batch_size,data_loader=train_data,verbose=True)
+    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
 
     fig=plt.figure(figsize=[5,5])
     plt.plot(loss,color='blue',lw=3)
@@ -69,10 +69,10 @@ if train_sgd:
     plt.title('SGD Softmax MNIST', size=18)
     plt.xticks(size=14)
     plt.yticks(size=14)
-    plt.savefig('sgd_softmax.pdf', bbox_inches='tight')
-    model.net.save_parameters('softmax_sgd_100_epochs.params')
+    plt.savefig('sgd_lenet.pdf', bbox_inches='tight')
+    model.net.save_parameters('lenet_sgd_100_epochs.params')
 else:
-    model.net.load_parameters('softmax_sgd_100_epochs.params',ctx=model_ctx)
+    model.net.load_parameters('lenet_sgd_100_epochs.params',ctx=model_ctx)
     par=dict()
     for name,gluon_par in model.net.collect_params().items():
         par.update({name:gluon_par.data()})
@@ -83,7 +83,7 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 
 # # Stochastic Gradient Langevin Dynamics Softmax <a class="anchor" id="chapter2"></a>
-model=softmax(hyper,in_units,out_units,ctx=model_ctx)
+model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                              data_loader=train_data,
@@ -103,7 +103,7 @@ plt.ylabel('Loss', size=18)
 plt.title('SGLD Softmax MNIST', size=18)
 plt.xticks(size=14)
 plt.yticks(size=14)
-plt.savefig('sgld_softmax.pdf', bbox_inches='tight')
+plt.savefig('sgld_lenet.pdf', bbox_inches='tight')
 
 
 posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
@@ -128,7 +128,7 @@ print("\n".join("{}\t{}".format(k, v) for k, v in mean_mcse_values.items()))
 
 # # Stochastic Gradient Langevin Dynamics Hierarchical <a class="anchor" id="chapter3"></a>
 print('#####################################################################################')
-model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
+model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                              data_loader=train_data,
@@ -148,7 +148,7 @@ plt.ylabel('Loss', size=18)
 plt.title('SGLD Hierarchical Softmax MNIST', size=18)
 plt.xticks(size=14)
 plt.yticks(size=14)
-plt.savefig('sgld_hierarchical_softmax.pdf', bbox_inches='tight')
+plt.savefig('sgld_hierarchical_lenet.pdf', bbox_inches='tight')
 
 
 posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
