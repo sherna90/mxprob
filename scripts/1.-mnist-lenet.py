@@ -33,7 +33,7 @@ transform = transforms.Compose([
 
 num_gpus = 1
 model_ctx = mx.gpu()
-num_epochs=3
+num_epochs=250
 num_workers = 2
 batch_size = 64 
 train_sgd=True
