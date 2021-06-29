@@ -135,11 +135,6 @@ loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                              data_loader=train_data,
                              verbose=True,chain_name='chain_hierarchical')
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-plt.rcParams['figure.dpi'] = 360
-sns.set_style("whitegrid")
-
 
 fig=plt.figure(figsize=[5,5])
 plt.plot(loss[0],color='blue',lw=3)
