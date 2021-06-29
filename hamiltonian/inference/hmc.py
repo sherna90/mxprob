@@ -116,6 +116,10 @@ class hmc(base):
             posterior_samples.append(posterior_samples_chain)
         return posterior_samples   
 
+    def loss(self,par,X_train,y_train):
+        batch_size=X_train.shape[0]
+        return self.model.loss(par,X_train=X_train,y_train=y_train)*1/batch_size
+
 
         
 

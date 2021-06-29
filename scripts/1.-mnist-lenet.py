@@ -25,6 +25,7 @@ from hamiltonian.models.softmax import lenet,hierarchical_lenet
 
 from sklearn.metrics import classification_report
 import arviz as az
+import glob
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -36,7 +37,8 @@ model_ctx = mx.gpu()
 num_epochs=250
 num_workers = 2
 batch_size = 64 
-train_sgd=True
+train_sgd=False
+train_sgld=False
 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -55,12 +57,12 @@ out_units=10
 
 
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
+inference=sgd(model,model.par,step_size=0.01,ctx=model_ctx)
 
 
 print('#####################################################################################')
 if train_sgd:
-    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
+    par,loss=inference.fit(epochs=100,batch_size=batch_size,data_loader=train_data,verbose=True)
 
     fig=plt.figure(figsize=[5,5])
     plt.plot(loss,color='blue',lw=3)
@@ -70,14 +72,14 @@ if train_sgd:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgd_lenet.pdf', bbox_inches='tight')
-    model.net.save_parameters('lenet_sgd_'+str(num_epochs)+'_epochs.params')
+    model.net.save_parameters('lenet_sgd_'+str(100)+'_epochs.params')
 else:
-    model.net.load_parameters('lenet_sgd_'+str(num_epochs)+'_epochs.params',ctx=model_ctx)
+    model.net.load_parameters('lenet_sgd_'+str(100)+'_epochs.params',ctx=model_ctx)
     par=dict()
     for name,gluon_par in model.net.collect_params().items():
         par.update({name:gluon_par.data()})
                
-total_samples,total_labels=inference.predict(par,batch_size=batch_size,num_samples=10,data_loader=val_data)
+total_samples,total_labels=inference.predict(model.par,batch_size=batch_size,num_samples=10,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
@@ -86,26 +88,31 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 print('#####################################################################################')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
-loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
-                             data_loader=train_data,
-                             verbose=True,chain_name='chain_nonhierarchical')
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-plt.rcParams['figure.dpi'] = 360
-sns.set_style("whitegrid")
+if train_sgld:
+    loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
+                                data_loader=train_data,
+                                verbose=True,chain_name='chain_nonhierarchical')
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    plt.rcParams['figure.dpi'] = 360
+    sns.set_style("whitegrid")
 
 
-fig=plt.figure(figsize=[5,5])
-plt.plot(loss[0],color='blue',lw=3)
-plt.plot(loss[1],color='red',lw=3)
-plt.xlabel('Epoch', size=18)
-plt.ylabel('Loss', size=18)
-plt.title('SGLD Lenet MNIST', size=18)
-plt.xticks(size=14)
-plt.yticks(size=14)
-plt.savefig('sgld_lenet.pdf', bbox_inches='tight')
-
+    fig=plt.figure(figsize=[5,5])
+    plt.plot(loss[0],color='blue',lw=3)
+    plt.plot(loss[1],color='red',lw=3)
+    plt.xlabel('Epoch', size=18)
+    plt.ylabel('Loss', size=18)
+    plt.title('SGLD Lenet MNIST', size=18)
+    plt.xticks(size=14)
+    plt.yticks(size=14)
+    plt.savefig('sgld_lenet.pdf', bbox_inches='tight')
+else:
+    chain1=glob.glob("chain_nonhierarchical_0_1_sgld*")
+    chain2=glob.glob("chain_nonhierarchical_0_sgld*")
+    posterior_samples=[chain1,chain2]
 
 posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
 total_samples,total_labels=inference.predict(posterior_samples_flat,5,data_loader=val_data)
@@ -114,7 +121,8 @@ y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 posterior_samples_multiple_chains=inference.posterior_diagnostics(posterior_samples)
-datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains]
+posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
+datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains_expanded]
 dataset = az.concat(datasets, dim="chain")
 mean_r_hat_values={var:float(az.rhat(dataset)[var].mean().data) for var in model.par}
 mean_ess_values={var:float(az.ess(dataset)[var].mean().data) for var in model.par}
@@ -131,26 +139,31 @@ print("\n".join("{}\t{}".format(k, v) for k, v in mean_mcse_values.items()))
 print('#####################################################################################')
 model=hierarchical_lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
-loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
-                             data_loader=train_data,
-                             verbose=True,chain_name='chain_hierarchical')
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-plt.rcParams['figure.dpi'] = 360
-sns.set_style("whitegrid")
+if train_sgld:
+    loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
+                                data_loader=train_data,
+                                verbose=True,chain_name='chain_hierarchical')
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    plt.rcParams['figure.dpi'] = 360
+    sns.set_style("whitegrid")
 
 
-fig=plt.figure(figsize=[5,5])
-plt.plot(loss[0],color='blue',lw=3)
-plt.plot(loss[1],color='red',lw=3)
-plt.xlabel('Epoch', size=18)
-plt.ylabel('Loss', size=18)
-plt.title('SGLD Hierarchical Lenet MNIST', size=18)
-plt.xticks(size=14)
-plt.yticks(size=14)
-plt.savefig('sgld_hierarchical_lenet.pdf', bbox_inches='tight')
-
+    fig=plt.figure(figsize=[5,5])
+    plt.plot(loss[0],color='blue',lw=3)
+    plt.plot(loss[1],color='red',lw=3)
+    plt.xlabel('Epoch', size=18)
+    plt.ylabel('Loss', size=18)
+    plt.title('SGLD Hierarchical Lenet MNIST', size=18)
+    plt.xticks(size=14)
+    plt.yticks(size=14)
+    plt.savefig('sgld_hierarchical_lenet.pdf', bbox_inches='tight')
+else:
+    chain1=glob.glob("chain_hierarchical_0_1_sgld*")
+    chain2=glob.glob("chain_hierarchical_0_sgld*")
+    posterior_samples=[chain1,chain2]
 
 posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
 total_samples,total_labels=inference.predict(posterior_samples_flat,5,data_loader=val_data)
@@ -159,7 +172,8 @@ y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 posterior_samples_multiple_chains=inference.posterior_diagnostics(posterior_samples)
-datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains]
+posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
+datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains_expanded]
 dataset = az.concat(datasets, dim="chain")
 mean_r_hat_values={var:float(az.rhat(dataset)[var].mean().data) for var in model.par}
 mean_ess_values={var:float(az.ess(dataset)[var].mean().data) for var in model.par}
