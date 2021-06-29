@@ -90,8 +90,8 @@ class sgld(base):
     def step(self,n_data,batch_size,momentum,epsilon,par):
         for var in par.keys():
             grad = clip(par[var].grad, -1e3,1e3)
-            momentum[var][:] =  momentum[var] + (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
-            par[var][:]=par[var]-momentum[var]
+            momentum[var][:] =  momentum[var] - (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
+            par[var][:]=par[var]+momentum[var]
         return momentum, par
 
     def draw_momentum(self,par,epsilon):
@@ -109,7 +109,7 @@ class sgld(base):
                 args['chain_name']=args['chain_name']+"_"+str(i)
             _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,
                 verbose=verbose,**args)
-            self.model.net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            self.model.net.initialize(init=mx.init.Normal(sigma=0.01), force_reinit=True, ctx=self.ctx)
             for name,gluon_par in self.model.net.collect_params().items():
                 self.model.par.update({name:gluon_par.data()})
             posterior_samples.append(samples)
