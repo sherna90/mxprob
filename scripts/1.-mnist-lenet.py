@@ -37,7 +37,7 @@ model_ctx = mx.gpu()
 num_epochs=250
 num_workers = 2
 batch_size = 64 
-train_sgd=False
+train_sgd=True
 train_sgld=False
 
 train_data = gluon.data.DataLoader(
@@ -62,7 +62,7 @@ inference=sgd(model,model.par,step_size=0.01,ctx=model_ctx)
 
 print('#####################################################################################')
 if train_sgd:
-    par,loss=inference.fit(epochs=100,batch_size=batch_size,data_loader=train_data,verbose=True)
+    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
 
     fig=plt.figure(figsize=[5,5])
     plt.plot(loss,color='blue',lw=3)
@@ -72,14 +72,11 @@ if train_sgd:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgd_lenet.pdf', bbox_inches='tight')
-    model.net.save_parameters('lenet_sgd_'+str(100)+'_epochs.params')
+    model.net.save_parameters('lenet_sgd_'+str(num_epochs)+'_epochs.params')
 else:
-    model.net.load_parameters('lenet_sgd_'+str(100)+'_epochs.params',ctx=model_ctx)
-    par=dict()
-    for name,gluon_par in model.net.collect_params().items():
-        par.update({name:gluon_par.data()})
-               
-total_samples,total_labels=inference.predict(model.par,batch_size=batch_size,num_samples=10,data_loader=val_data)
+    model.net.load_parameters('lenet_sgd_'+str(num_epochs)+'_epochs.params',ctx=model_ctx)
+
+total_samples,total_labels=inference.predict(par,batch_size=batch_size,num_samples=10,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
