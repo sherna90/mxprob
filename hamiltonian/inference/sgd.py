@@ -83,9 +83,12 @@ class sgd(base):
         data_loader,n_examples=self._get_loader(**args)
         total_labels=[]
         total_samples=[]
+        total_loglike=[]
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
+            y_test=y_test.as_in_context(self.ctx)
             y_hat=self.model.predict(par,X_test)
+            total_loglike.append(y_hat.log_prob(y_test).asnumpy())
             if X_test.shape[0]==batch_size:
                 samples=[]
                 for _ in range(num_samples):
@@ -94,4 +97,5 @@ class sgd(base):
                 total_labels.append(y_test.asnumpy())
         total_samples=np.concatenate(total_samples,axis=1)
         total_labels=np.concatenate(total_labels)
-        return total_samples,total_labels   
+        total_loglike=np.concatenate(total_loglike)
+        return total_samples,total_labels,total_loglike   

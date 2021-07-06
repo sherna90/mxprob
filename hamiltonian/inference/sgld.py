@@ -120,22 +120,28 @@ class sgld(base):
         data_loader,_=self._get_loader(**args)
         total_samples=[]
         num_samples=len(posterior_samples)
+        total_loglike=[]
         for i in range(num_samples):
             samples=[]
             labels=[]
+            loglike=[]
             self.model.net.load_parameters(posterior_samples[i],ctx=self.ctx)
             par=dict()
             for name,gluon_par in self.model.net.collect_params().items():
                 par.update({name:gluon_par.data()})
             for X_test,y_test in data_loader:
                 X_test=X_test.as_in_context(self.ctx)
+                y_test=y_test.as_in_context(self.ctx)
                 y_pred=self.model.predict(par,X_test)
+                loglike.append(y_pred.log_prob(y_test).asnumpy())
                 samples.append(y_pred.sample().asnumpy())
                 labels.append(y_test.asnumpy())
             total_samples.append(np.concatenate(samples))
+            total_loglike.append(np.concatenate(loglike))
             total_labels=np.concatenate(labels)
         total_samples=np.stack(total_samples)
-        return total_samples,total_labels
+        total_loglike=np.stack(total_loglike)
+        return total_samples,total_labels,total_loglike
 
     def posterior_diagnostics(self,posterior_samples):
         chains=len(posterior_samples)
@@ -148,4 +154,5 @@ class sgld(base):
                     single_chain[name].append(par.data().asnumpy())
             posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
             posterior_samples_multiple_chains.append(posterior_samples_single_chain)
-        return posterior_samples_multiple_chains
+            posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
+        return posterior_samples_multiple_chains_expanded
