@@ -6,7 +6,7 @@ import mxnet as mx
 from mxnet import nd, autograd, gluon
 import mxnet.gluon.probability as mxp
 
-from mxnet.gluon.model_zoo.vision import resnet 
+from mxnet.gluon.model_zoo.vision import resnet,vgg 
                
 
 class softmax():
@@ -42,7 +42,8 @@ class softmax():
             if k=='X_train':
                 X=nd.array(v,ctx=self.ctx)
         for name,gluon_par in self.net.collect_params().items():
-            gluon_par.set_data(par[name])
+            if name in par.keys():
+                gluon_par.set_data(par[name])
         y_linear = self.net.forward(X)
         #y_linear = nd.dot(X, nd.transpose(par['0.weight'])) + par['0.bias']
         yhat = self.softmax(y_linear)
@@ -139,9 +140,9 @@ class lenet(softmax):
     def _init_net(self,in_units,out_units):
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(
-            gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='sigmoid'),
+            gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='swish'),
             gluon.nn.AvgPool2D(pool_size=2, strides=2),
-            gluon.nn.Conv2D(channels=16, kernel_size=5, activation='sigmoid'),
+            gluon.nn.Conv2D(channels=16, kernel_size=5, activation='swish'),
             gluon.nn.AvgPool2D(pool_size=2, strides=2),
             # `Dense` will transform an input of the shape (batch size, number of
             # channels, height, width) into an input of the shape (batch size,
@@ -169,3 +170,30 @@ class hierarchical_lenet(lenet):
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
             log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
         return log_prior
+
+class vgg_softmax(softmax):
+    
+    def __init__(self,_hyper,in_units=(3,256,256),out_units=38,n_layers=16,pre_trained=False,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.version=2
+        #n_layers = 11, 13, 16, 19.
+        self.pre_trained=pre_trained
+        self.net,self.par  = self._init_net(in_units,out_units,n_layers)
+        
+    def _init_net(self,in_units,out_units,n_layers):
+        data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+        net = gluon.nn.Sequential()
+        model=vgg.get_vgg(n_layers, pretrained=self.pre_trained, ctx=self.ctx)
+        net.add(model.features[:-4])
+        #features_shape=net(data.as_in_context(self.ctx)).shape[1:]
+        net.add(gluon.nn.Dense(out_units))
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        net(data.as_in_context(self.ctx))
+        net[0].setattr('lr_mult', 0)
+        net[0].setattr('grad_req', 'null')
+        par=dict()
+        for name,gluon_par in net[1].collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par

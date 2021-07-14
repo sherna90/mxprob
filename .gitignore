@@ -135,3 +135,7 @@ data/*
 
 benchamrks/results
 benchmark/results/*
+
+**results
+
+scripts/results

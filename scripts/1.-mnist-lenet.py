@@ -23,7 +23,14 @@ from hamiltonian.inference.sgd import sgd
 from hamiltonian.inference.sgld import sgld
 from hamiltonian.models.softmax import lenet,hierarchical_lenet
 
+import mxnet as mx
+from hamiltonian.inference.sgd import sgd
+from hamiltonian.inference.sgld import sgld
+from hamiltonian.models.softmax import softmax,hierarchical_softmax
+
 from sklearn.metrics import classification_report
+from sklearn.metrics import f1_score
+from hamiltonian.psis import *
 import arviz as az
 import glob
 
@@ -37,8 +44,8 @@ model_ctx = mx.gpu()
 num_epochs=250
 num_workers = 2
 batch_size = 64 
-train_sgd=True
-train_sgld=False
+train_sgd=False
+
 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -61,6 +68,7 @@ inference=sgd(model,model.par,step_size=0.01,ctx=model_ctx)
 
 
 print('#####################################################################################')
+print('SGD Lenet')
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
 
@@ -72,21 +80,29 @@ if train_sgd:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgd_lenet.pdf', bbox_inches='tight')
-    model.net.save_parameters('lenet_sgd_'+str(num_epochs)+'_epochs.params')
+    model.net.save_parameters('results/lenet/lenet_sgd_'+str(num_epochs)+'_epochs.params')
 else:
-    model.net.load_parameters('lenet_sgd_'+str(num_epochs)+'_epochs.params',ctx=model_ctx)
+    model.net.load_parameters('results/lenet/lenet_sgd_'+str(num_epochs)+'_epochs.params',ctx=model_ctx)
+    par=dict()
+    for name,gluon_par in model.net.collect_params().items():
+        par.update({name:gluon_par.data()})
 
-total_samples,total_labels=inference.predict(par,batch_size=batch_size,num_samples=10,data_loader=val_data)
-y_hat=np.quantile(total_samples,.5,axis=0)
-print(classification_report(np.int32(total_labels),np.int32(y_hat)))
+total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
+score=[]
+for q in np.arange(.1,.9,.1):
+    y_hat=np.quantile(total_samples,q,axis=0)
+    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
+print("SGD")
+print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
 
 
 # # Stochastic Gradient Langevin Dynamics Lenet <a class="anchor" id="chapter2"></a>
 print('#####################################################################################')
+print('SGLD Non-Hierarchical Lenet')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 
-if train_sgld:
+if train_sgd:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
                                 verbose=True,chain_name='chain_nonhierarchical')
@@ -107,19 +123,14 @@ if train_sgld:
     plt.yticks(size=14)
     plt.savefig('sgld_lenet.pdf', bbox_inches='tight')
 else:
-    chain1=glob.glob("chain_nonhierarchical_0_1_sgld*")
-    chain2=glob.glob("chain_nonhierarchical_0_sgld*")
+    chain1=glob.glob("results/lenet/chain_nonhierarchical_0_1_sgld*")
+    chain2=glob.glob("results/lenet/chain_nonhierarchical_0_sgld*")
     posterior_samples=[chain1,chain2]
 
 posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
-total_samples,total_labels=inference.predict(posterior_samples_flat,5,data_loader=val_data)
-
-y_hat=np.quantile(total_samples,.5,axis=0)
-print(classification_report(np.int32(total_labels),np.int32(y_hat)))
-
+total_samples,total_labels,log_like=inference.predict(posterior_samples_flat,5,data_loader=val_data)
 posterior_samples_multiple_chains=inference.posterior_diagnostics(posterior_samples)
-posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
-datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains_expanded]
+datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains]
 dataset = az.concat(datasets, dim="chain")
 mean_r_hat_values={var:float(az.rhat(dataset)[var].mean().data) for var in model.par}
 mean_ess_values={var:float(az.ess(dataset)[var].mean().data) for var in model.par}
@@ -131,13 +142,26 @@ print('ESS')
 print("\n".join("{}\t{}".format(k, v) for k, v in mean_ess_values.items()))
 print('MCSE')
 print("\n".join("{}\t{}".format(k, v) for k, v in mean_mcse_values.items()))
+loo,loos,ks=psisloo(log_like)
+score=[]
+for q in np.arange(.1,.9,.1):
+    y_hat=np.quantile(total_samples,q,axis=0)
+    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
+print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
+
+score=[]
+for q in np.arange(.1,.9,.1):
+    y_hat=np.quantile(total_samples,q,axis=0)
+    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), sample_weight=1-np.clip(ks,0,1),average='weighted'))
+print('mean f-loo : {0}, std f-loo : {1}'.format(np.mean(score),2*np.std(score)))
 
 # # Stochastic Gradient Langevin Dynamics Hierarchical <a class="anchor" id="chapter3"></a>
 print('#####################################################################################')
+print('SGLD Hierarchical Lenet')
 model=hierarchical_lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 
-if train_sgld:
+if train_sgd:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
                                 verbose=True,chain_name='chain_hierarchical')
@@ -158,19 +182,14 @@ if train_sgld:
     plt.yticks(size=14)
     plt.savefig('sgld_hierarchical_lenet.pdf', bbox_inches='tight')
 else:
-    chain1=glob.glob("chain_hierarchical_0_1_sgld*")
-    chain2=glob.glob("chain_hierarchical_0_sgld*")
+    chain1=glob.glob("results/lenet/chain_hierarchical_0_1_sgld*")
+    chain2=glob.glob("results/lenet/chain_hierarchical_0_sgld*")
     posterior_samples=[chain1,chain2]
 
 posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
-total_samples,total_labels=inference.predict(posterior_samples_flat,5,data_loader=val_data)
-
-y_hat=np.quantile(total_samples,.5,axis=0)
-print(classification_report(np.int32(total_labels),np.int32(y_hat)))
-
+total_samples,total_labels,log_like=inference.predict(posterior_samples_flat,5,data_loader=val_data)
 posterior_samples_multiple_chains=inference.posterior_diagnostics(posterior_samples)
-posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
-datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains_expanded]
+datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains]
 dataset = az.concat(datasets, dim="chain")
 mean_r_hat_values={var:float(az.rhat(dataset)[var].mean().data) for var in model.par}
 mean_ess_values={var:float(az.ess(dataset)[var].mean().data) for var in model.par}
@@ -182,3 +201,16 @@ print('ESS')
 print("\n".join("{}\t{}".format(k, v) for k, v in mean_ess_values.items()))
 print('MCSE')
 print("\n".join("{}\t{}".format(k, v) for k, v in mean_mcse_values.items()))
+
+loo,loos,ks=psisloo(log_like)
+score=[]
+for q in np.arange(.1,.9,.1):
+    y_hat=np.quantile(total_samples,q,axis=0)
+    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
+print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
+
+score=[]
+for q in np.arange(.1,.9,.1):
+    y_hat=np.quantile(total_samples,q,axis=0)
+    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), sample_weight=1-np.clip(ks,0,1),average='weighted'))
+print('mean f-loo : {0}, std f-loo : {1}'.format(np.mean(score),2*np.std(score)))
