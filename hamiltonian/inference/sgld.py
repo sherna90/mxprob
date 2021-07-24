@@ -89,7 +89,8 @@ class sgld(base):
 
     def step(self,n_data,batch_size,momentum,epsilon,par):
         for var in par.keys():
-            grad = clip(par[var].grad, -1e3,1e3)
+            #grad = clip(par[var].grad, -1e3,1e3)
+            grad = par[var].grad
             momentum[var][:] =  momentum[var] - (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
             par[var][:]=par[var]+momentum[var]
         return momentum, par
