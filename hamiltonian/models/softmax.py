@@ -121,15 +121,18 @@ class resnet_softmax(softmax):
         model=resnet.get_resnet(self.version,n_layers,pretrained=self.pre_trained,ctx=self.ctx)
         net.add(model.features[:-1])
         net.add(gluon.nn.Dense(out_units))#capa de salida
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
-        net(data.as_in_context(self.ctx))
         par=dict()
         if self.pre_trained:
+            net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+            net(data.as_in_context(self.ctx))
             for name,gluon_par in net[1].collect_params().items():
                 par.update({name:gluon_par.data()})
                 gluon_par.grad_req='null'
         else:
+            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+            net(data.as_in_context(self.ctx))
             for name,gluon_par in net.collect_params().items():
                 par.update({name:gluon_par.data()})
                 gluon_par.grad_req='null'
