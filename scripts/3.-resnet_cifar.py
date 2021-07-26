@@ -103,7 +103,6 @@ model=resnet_softmax(hyper,in_units,out_units,n_layers,pre_trained,ctx=model_ctx
 inference=sgld(model,model.par,step_size=0.0001,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=3
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,

@@ -64,6 +64,8 @@ class sgld(base):
         for var in self.model.par.keys():
             par[var].attach_grad()
         j=0
+        momentum={var:par[var].zeros_like(ctx=self.ctx,
+            dtype=par[var].dtype) for var in par.keys()}
         samples=list()
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
@@ -75,7 +77,6 @@ class sgld(base):
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 epsilon=self.step_size*((30 + j) ** (-0.55))
-                momentum=self.draw_momentum(self.model.par,epsilon)
                 momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
@@ -88,11 +89,14 @@ class sgld(base):
         return par,loss_val,samples
 
     def step(self,n_data,batch_size,momentum,epsilon,par):
+        normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)
-            grad = par[var].grad
-            momentum[var][:] =  momentum[var] - (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
-            par[var][:]=par[var]+momentum[var]
+            grad = n_data*par[var].grad/ batch_size
+            momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
+            #momentum[var][:] =  momentum[var] - (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
+            par[var][:] -=self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)+normal[var]
+
         return momentum, par
 
     def draw_momentum(self,par,epsilon):
@@ -108,11 +112,13 @@ class sgld(base):
         for i in range(chains):
             if 'chain_name' in args:
                 args['chain_name']=args['chain_name']+"_"+str(i)
+            for var in self.model.par.keys():
+                self.model.par.update({var:random.normal(0,0.01,
+                    shape=self.model.par[var].shape,
+                    ctx=self.ctx,
+                    dtype=self.model.par[var].dtype)})
             _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,
                 verbose=verbose,**args)
-            self.model.net.initialize(init=mx.init.Normal(sigma=0.01), force_reinit=True, ctx=self.ctx)
-            for name,gluon_par in self.model.net.collect_params().items():
-                self.model.par.update({name:gluon_par.data()})
             posterior_samples.append(samples)
             loss_values.append(loss)
         return loss_values,posterior_samples

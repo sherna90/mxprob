@@ -25,7 +25,7 @@ from hamiltonian.models.softmax import softmax,hierarchical_softmax
 
 from sklearn.metrics import classification_report
 from sklearn.metrics import f1_score
-from hamiltonian.psis import *
+from hamiltonian.utils.psis import *
 import arviz as az
 import glob
 
@@ -35,11 +35,11 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 1
-model_ctx = mx.gpu()
-num_epochs=100
-num_workers = 2
+model_ctx = mx.cpu()
+num_epochs=10
+num_workers = 0
 batch_size = 64 
-train_sgd=False
+train_sgd=True
 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -56,7 +56,7 @@ out_units=10
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
 
-if train_sgd:
+if False:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
 
     fig=plt.figure(figsize=[5,5])
