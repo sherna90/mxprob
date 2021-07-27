@@ -67,6 +67,7 @@ class sgld(base):
         momentum={var:par[var].zeros_like(ctx=self.ctx,
             dtype=par[var].dtype) for var in par.keys()}
         samples=list()
+        epsilon=self.step_size
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -76,7 +77,8 @@ class sgld(base):
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                epsilon=self.step_size*((30 + j) ** (-0.55))
+                #epsilon=self.step_size*((30 + j) ** (-0.55))
+                epsilon=0.9*epsilon
                 momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
@@ -92,10 +94,10 @@ class sgld(base):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)
-            grad = n_data*par[var].grad/ batch_size
+            grad = par[var].grad/ batch_size
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             #momentum[var][:] =  momentum[var] - (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
-            par[var][:] -=self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)+normal[var]
+            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)+normal[var]
 
         return momentum, par
 
@@ -112,11 +114,11 @@ class sgld(base):
         for i in range(chains):
             if 'chain_name' in args:
                 args['chain_name']=args['chain_name']+"_"+str(i)
-            for var in self.model.par.keys():
-                self.model.par.update({var:random.normal(0,0.01,
-                    shape=self.model.par[var].shape,
-                    ctx=self.ctx,
-                    dtype=self.model.par[var].dtype)})
+            #for var in self.model.par.keys():
+            #    self.model.par.update({var:random.normal(0,0.01,
+            #        shape=self.model.par[var].shape,
+            #        ctx=self.ctx,
+            #        dtype=self.model.par[var].dtype)})
             _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,
                 verbose=verbose,**args)
             posterior_samples.append(samples)

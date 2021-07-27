@@ -27,9 +27,9 @@ from sklearn.metrics import f1_score
 
 transform_train = transforms.Compose([
     # Randomly crop an area and resize it to be 32x32, then pad it to be 40x40
-    #transforms.RandomCrop(32, pad=4),
+    transforms.RandomCrop(32, pad=4),
     # Randomly flip the image horizontally
-    #transforms.RandomFlipLeftRight(),
+    transforms.RandomFlipLeftRight(),
     # Transpose the image from height*width*num_channels to num_channels*height*width
     # and map values from [0, 255] to [0,1]
     transforms.ToTensor(),
@@ -42,9 +42,9 @@ transform_test = transforms.Compose([
     transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
 ])
 
-model_ctx=mx.cpu()
-per_device_batch_size = 512
-num_workers = 0
+model_ctx=mx.gpu()
+per_device_batch_size = 256
+num_workers = 4
 batch_size = per_device_batch_size 
 
 train_data = gluon.data.DataLoader(
@@ -63,7 +63,7 @@ out_units=10
 n_layers=18
 pre_trained=True
 train_sgd=True
-num_epochs=3
+num_epochs=250
 
 print('#####################################################################################')
 print('SGD Cifar')

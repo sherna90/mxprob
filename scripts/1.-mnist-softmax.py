@@ -35,9 +35,9 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 1
-model_ctx = mx.cpu()
+model_ctx = mx.gpu()
 num_epochs=10
-num_workers = 0
+num_workers = 4
 batch_size = 64 
 train_sgd=True
 
@@ -56,7 +56,7 @@ out_units=10
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
 
-if False:
+if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
 
     fig=plt.figure(figsize=[5,5])
