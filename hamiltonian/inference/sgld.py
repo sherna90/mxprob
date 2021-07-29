@@ -77,8 +77,8 @@ class sgld(base):
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                #epsilon=self.step_size*((30 + j) ** (-0.55))
-                epsilon=0.9*epsilon
+                epsilon=self.step_size*((30 + j) ** (-0.55))
+                #epsilon=0.9*epsilon
                 momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
                 cumulative_loss += nd.sum(loss).asscalar()
                 j=j+1
@@ -96,8 +96,9 @@ class sgld(base):
             #grad = clip(par[var].grad, -1e3,1e3)
             grad = par[var].grad/ batch_size
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
-            #momentum[var][:] =  momentum[var] - (n_data/batch_size)*self.step_size * grad #calcula para parametros peso y bias
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)+normal[var]
+            #par[var][:]=par[var]-self.step_size*grad+normal[var]
+
 
         return momentum, par
 
@@ -114,13 +115,9 @@ class sgld(base):
         for i in range(chains):
             if 'chain_name' in args:
                 args['chain_name']=args['chain_name']+"_"+str(i)
-            #for var in self.model.par.keys():
-            #    self.model.par.update({var:random.normal(0,0.01,
-            #        shape=self.model.par[var].shape,
-            #        ctx=self.ctx,
-            #        dtype=self.model.par[var].dtype)})
             _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,
                 verbose=verbose,**args)
+            self.model.par=self.model.reset(self.model.net)
             posterior_samples.append(samples)
             loss_values.append(loss)
         return loss_values,posterior_samples

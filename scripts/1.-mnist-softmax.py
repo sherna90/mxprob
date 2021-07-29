@@ -36,9 +36,9 @@ transform = transforms.Compose([
 
 num_gpus = 1
 model_ctx = mx.gpu()
-num_epochs=10
+num_epochs=100
 num_workers = 4
-batch_size = 64 
+batch_size = 256 
 train_sgd=True
 
 train_data = gluon.data.DataLoader(
@@ -54,9 +54,11 @@ in_units=(28,28)
 out_units=10
 
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
+inference=sgd(model,model.par,step_size=0.01,ctx=model_ctx)
 
-if train_sgd:
+print('#####################################################################################')
+print("SGD")
+if False:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
 
     fig=plt.figure(figsize=[5,5])
@@ -79,12 +81,13 @@ score=[]
 for q in np.arange(.1,.9,.1):
     y_hat=np.quantile(total_samples,q,axis=0)
     score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
-print("SGD")
+
 print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
 
 
 # # Stochastic Gradient Langevin Dynamics Softmax <a class="anchor" id="chapter2"></a>
 print('#####################################################################################')
+print('SGLD Non-hierarchical Softmax')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 
@@ -140,6 +143,8 @@ print('mean f-loo : {0}, std f-loo : {1}'.format(np.mean(score),2*np.std(score))
 
 # # Stochastic Gradient Langevin Dynamics Hierarchical <a class="anchor" id="chapter3"></a>
 print('#####################################################################################')
+print('SGLD Hierarchical Softmax')
+
 model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 

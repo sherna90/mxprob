@@ -20,14 +20,17 @@ class softmax():
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(gluon.nn.Flatten())
         net.add(gluon.nn.Dense(out_units,in_units=in_units[0]*in_units[1]))#capa de salida
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=self.reset(net)
+        return net,par
+
+    def reset(self,net):
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
         par=dict()
         for name,gluon_par in net.collect_params().items():
             par.update({name:gluon_par.data()})
             gluon_par.grad_req='null'
-        return net,par
+        return par
 
-        
     def softmax(self, y_linear):
         exp = nd.exp(y_linear-nd.max(y_linear, axis=1).reshape((-1,1)))
         norms = nd.sum(exp, axis=1).reshape((-1,1))
@@ -40,12 +43,12 @@ class softmax():
     def forward(self,par, **args):
         for k,v in args.items():
             if k=='X_train':
-                X=nd.array(v,ctx=self.ctx)
+                X=v.as_in_context(self.ctx)
+                #X=nd.array(v,ctx=self.ctx)
         for name,gluon_par in self.net.collect_params().items():
             if name in par.keys():
                 gluon_par.set_data(par[name])
         y_linear = self.net.forward(X)
-        #y_linear = nd.dot(X, nd.transpose(par['0.weight'])) + par['0.bias']
         yhat = self.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
@@ -99,11 +102,7 @@ class mlp_softmax(softmax):
         for i in range(1,n_layers):
             net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='relu'))#capa de entrada
         net.add(gluon.nn.Dense(out_units,in_units=n_hidden))#capa de entrada
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        par=dict()
-        for name,gluon_par in net.collect_params().items():
-            par.update({name:gluon_par.data()})
-            gluon_par.grad_req='null'
+        par=self.reset(net)
         return net,par
 
 class resnet_softmax(softmax):
@@ -121,21 +120,16 @@ class resnet_softmax(softmax):
         model=resnet.get_resnet(self.version,n_layers,pretrained=self.pre_trained,ctx=self.ctx)
         net.add(model.features[:-1])
         net.add(gluon.nn.Dense(out_units))#capa de salida
-        par=dict()
         if self.pre_trained:
             net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
             data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
             net(data.as_in_context(self.ctx))
-            for name,gluon_par in net[1].collect_params().items():
-                par.update({name:gluon_par.data()})
-                gluon_par.grad_req='null'
+            par=self.reset(net[1])
         else:
-            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ct5x)
             data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
             net(data.as_in_context(self.ctx))
-            for name,gluon_par in net.collect_params().items():
-                par.update({name:gluon_par.data()})
-                gluon_par.grad_req='null'
+            par=self.reset(net)
         return net,par
 
 class lenet(softmax):
@@ -158,10 +152,7 @@ class lenet(softmax):
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
-        par=dict()
-        for name,gluon_par in net.collect_params().items():
-            par.update({name:gluon_par.data()})
-            gluon_par.grad_req='null'
+        par=self.reset(net)
         return net,par
     
 class hierarchical_lenet(lenet):
@@ -195,8 +186,14 @@ class vgg_softmax(softmax):
         net.add(gluon.nn.Dense(out_units))
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         net(data.as_in_context(self.ctx))
-        par=dict()
-        for name,gluon_par in net[1].collect_params().items():
-            par.update({name:gluon_par.data()})
-            gluon_par.grad_req='null'
+        if self.pre_trained:
+            net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+            data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+            net(data.as_in_context(self.ctx))
+            par=self.reset(net[1])
+        else:
+            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ct5x)
+            data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+            net(data.as_in_context(self.ctx))
+            par=self.reset(net)
         return net,par
