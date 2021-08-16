@@ -1,4 +1,4 @@
-import numpy as np
+import mxnet.numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
 from tqdm import tqdm, trange
@@ -32,7 +32,7 @@ class base:
         assert X.shape[0] == y.shape[0]
         for start_idx in range(0, X.shape[0] - batchsize + 1, batchsize):
             excerpt = slice(start_idx, start_idx + batchsize)
-            yield nd.array(X[excerpt],ctx=self.ctx), nd.array(y[excerpt],ctx=self.ctx)#generador, pasa los datos originales a la memoria donde se este trabajando cpu o gpu
+            yield np.array(X[excerpt],ctx=self.ctx), nd.array(y[excerpt],ctx=self.ctx)#generador, pasa los datos originales a la memoria donde se este trabajando cpu o gpu
             #devuelve un arreglo mxnet
     
     def step(self,batch_size,momentum,par):

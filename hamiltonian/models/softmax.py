@@ -197,3 +197,28 @@ class vgg_softmax(softmax):
             net(data.as_in_context(self.ctx))
             par=self.reset(net)
         return net,par
+
+class embeddings_softmax(softmax):
+    
+    def __init__(self,_hyper,in_units,out_units,n_layers,n_hidden,vocab_size,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.net,self.par  = self._init_net(in_units,out_units,n_layers,n_hidden,vocab_size)
+        
+    def _init_net(self,in_units,out_units,n_layers,n_hidden,vocab_size):
+        embedding_dim = 100
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net.add(gluon.nn.Embedding(input_dim=vocab_size, output_dim=in_units))#capa de entrada
+        net.add(gluon.nn.GlobalMaxPool1D())
+        net.add(gluon.nn.Dense(n_hidden,in_units=in_units,activation='relu'))
+        for i in range(1,n_layers):
+            net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='sigmoid'))
+        net.add(gluon.nn.Dense(out_units,in_units=n_hidden))
+        #net.add(gluon.nn.Dense(32,in_units=in_units,activation='relu'))
+        #net.add(gluon.nn.Dense(out_units,in_units=4, activation='sigmoid'))
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=dict()
+        for name,gluon_par in net.collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par

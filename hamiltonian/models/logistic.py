@@ -2,88 +2,101 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import numpy as np
-from hamiltonian.utils import *
-from copy import deepcopy
-from numpy.linalg import norm
-import time
+import mxnet as mx
+from mxnet import nd, autograd, gluon,npx
+import mxnet.gluon.probability as mxp
+npx.set_np()
+               
 
-class logistic:
+class logistic():
     
-    def __init__(self,_hyper):
-        self.hyper={var:np.asarray(_hyper[var]) for var in _hyper.keys()}
+    def __init__(self,_hyper,in_units,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.net,self.par  = self._init_net(in_units)
+        
+    def _init_net(self,in_units):
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net.add(gluon.nn.Dense(1,in_units=in_units))#capa de salida
+        par=self.reset(net)
+        return net,par
 
-    def log_prior(self, par,**args):
-        K=0
-        for var in par.keys():
-            dim=(np.asarray(par[var])).size
-            K+=dim*0.5*np.log(self.hyper['alpha']/(2*np.pi))
-            K-=0.5*self.hyper['alpha']*np.sum(np.square(par[var]))
-        return K
-    
+    def reset(self,net):
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
+        par=dict()
+        for name,gluon_par in net.collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return par
 
-    def grad(self, par,**args):
+    def sigmoid(self,y_linear):
+        return 1. / (1. + np.exp(-y_linear))
+
+    def predict(self, par,X,prob=False):
+        y_hat=self.forward(par,X_train=X)   
+        return y_hat	
+
+    def forward(self,par, **args):
+        eps = 1e-3
+        dtype=set([self.par[var].dtype for var in self.par.keys()]).pop()
         for k,v in args.items():
             if k=='X_train':
-                X=np.asarray(v)
-                n_data=X.shape[0]
-            elif k=='y_train':
-                y=np.asarray(v)
-        yhat=self.net(par,**args)
-        diff = y.reshape(-1,1)-yhat
-        #diff=diff[:,:-1]
-        grad_w = np.dot(X.T, diff)
-        grad_b = np.sum(diff, axis=0)
-        grad={}
-        grad['weights']=grad_w-self.hyper['alpha']*par['weights']
-        grad['weights']=-1.0*grad['weights']
-        grad['bias']=grad_b-self.hyper['alpha']*par['bias']
-        grad['bias']=-1.0*grad['bias']
-        return grad	
-
-    def net(self,par,**args):
-        for k,v in args.items():
-            if k=='X_train':
-                X=np.asarray(v)
-        y_linear = np.dot(X, par['weights']) + par['bias']
-        y_linear=np.minimum(y_linear,-np.log(np.finfo(float).eps))
-        y_linear=np.maximum(y_linear,-np.log(1./np.finfo(float).tiny-1.0))
+                X_train=np.array(v).astype(dtype)
+                #X=nd.array(v,ctx=self.ctx)
+        for name,gluon_par in self.net.collect_params().items():
+            if name in par.keys():
+                gluon_par.set_data(par[name])
+        y_linear = self.net.forward(X_train)
         yhat = self.sigmoid(y_linear)
-        return yhat
-
-    def sigmoid(self, y_linear):
-        norms=(1.0 + np.exp(-y_linear))
-        return 1.0 / norms
-
-    def negative_log_posterior(self, par,**args ):
+        yhat=nd.clip(yhat.as_nd_ndarray(),eps,1.-eps)
+        cat=mxp.Binomial(n=1,prob=yhat)
+        return cat
+     
+    def negative_log_prior(self, par,**args):
+        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        for var in par.keys():
+            means=nd.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=nd.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
+            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
+            log_prior+nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
+        return -1.0*nd.sum(log_prior)
+    
+    def negative_log_likelihood(self,par,**args):
+        dtype=set([self.par[var].dtype for var in self.par.keys()]).pop()
         for k,v in args.items():
             if k=='X_train':
-                X=np.asarray(v)
-                n_data=X.shape[0]
-        return (-1.0/n_data)*(self.log_likelihood(par,**args)+self.log_prior(par,**args))
-
-    def log_likelihood(self, par,**args):
-        for k,v in args.items():
-            if k=='X_train':
-                X=np.asarray(v)
+                X=v
             elif k=='y_train':
-                y=np.asarray(v)
-        y_pred=np.squeeze(self.net(par,**args),axis=1)
-        ll = np.sum(np.multiply(y,np.log(y_pred))+np.multiply((1.0-y),np.log(1.0-y_pred)))
-        return ll
+                y=v
+        y_hat = self.forward(par,X_train=X)
+        return -nd.sum(y_hat.log_prob(y).as_nd_ndarray().astype(dtype))
+        
+    def loss(self,par,**args):
+        log_like=self.negative_log_likelihood(par,**args)
+        log_prior=self.negative_log_prior(par,**args)
+        return log_like+log_prior
 
 
-    def predict(self, par,X,prob=False,batchsize=32):
-        results=[]
-        for start_idx in range(0, X.shape[0] - batchsize + 1, batchsize):
-            excerpt = slice(start_idx, start_idx + batchsize)
-            X_batch=X[excerpt] 
-            yhat=self.net(par,X_train=X_batch)
-            if prob:
-                out=yhat
-            else:
-                out=(yhat>0.5).astype(int).flatten()
-            results.append(out)
-        results=np.asarray(results)
-        return results.flatten()	
-
-
+class embeddings_logistic(logistic):
+    
+    def __init__(self,_hyper,in_units,n_layers,n_hidden,vocab_size,embedding_dim,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.net,self.par  = self._init_net(in_units,n_layers,n_hidden,vocab_size,embedding_dim)
+        
+    def _init_net(self,in_units,n_layers,n_hidden,vocab_size,embedding_dim):
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net.add(gluon.nn.Embedding(input_dim=vocab_size, output_dim=embedding_dim))#capa de entrada
+        net.add(gluon.nn.GlobalMaxPool1D())
+        net.add(gluon.nn.Dense(n_hidden,in_units=embedding_dim,activation='relu'))
+        for i in range(1,n_layers):
+            net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='sigmoid'))
+        net.add(gluon.nn.Dense(1,in_units=n_hidden))
+        #net.add(gluon.nn.Dense(32,in_units=in_units,activation='relu'))
+        #net.add(gluon.nn.Dense(out_units,in_units=4, activation='sigmoid'))
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=dict()
+        for name,gluon_par in net.collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par

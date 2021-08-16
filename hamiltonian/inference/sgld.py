@@ -8,47 +8,6 @@ from hamiltonian.inference.base import base
 
 class sgld(base):
 
-    def fit_gluon(self,epochs=1,batch_size=1,**args):
-        if 'verbose' in args:
-            verbose=args['verbose']
-        else:
-            verbose=None
-        if 'chain_name' in args:
-            chain_name=args['chain_name']
-        else:
-            chain_name='chain_'+str(np.random.randint(1000)) 
-        epochs=int(epochs)
-        loss_val=np.zeros(epochs)
-        for var in self.model.par.keys():
-            self.model.par[var].attach_grad()
-        sgld = mx.optimizer.Optimizer.create_optimizer('sgld',
-            learning_rate=self.step_size,rescale_grad=1./batch_size)
-        states=list()
-        indices=list()
-        samples=list()
-        for i,var in enumerate(self.model.par.keys()):
-            states.append(sgld.create_state(i,self.model.par[var]))
-            indices.append(i)
-        for i in tqdm(range(epochs)):
-            data_loader,n_examples=self._get_loader(**args)
-            cumulative_loss=0
-            j=0
-            for X_batch, y_batch in data_loader:
-                X_batch=X_batch.as_in_context(self.ctx)
-                y_batch=y_batch.as_in_context(self.ctx)
-                with autograd.record():
-                    loss = self.loss(self.model.par,X_train=X_batch,y_train=y_batch)
-                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                sgld.update(indices,[self.model.par[var] for var in self.model.par.keys()],[self.model.par[var].grad for var in self.model.par.keys()],states)
-                cumulative_loss += nd.sum(loss).asscalar()
-            loss_val[i]=cumulative_loss/n_examples
-            if verbose and (i%(epochs/10)==0):
-                print('loss: {0:.4f}'.format(loss_val[i]))
-            file_name=chain_name+'_sgld_epoch_'+str(i)+'_.params'
-            self.model.net.save_parameters(file_name)
-            samples.append(file_name)
-        return self.model.par,loss_val,samples
-
     def fit(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:
             verbose=args['verbose']
@@ -64,7 +23,7 @@ class sgld(base):
         for var in self.model.par.keys():
             par[var].attach_grad()
         j=0
-        momentum={var:par[var].zeros_like(ctx=self.ctx,
+        momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
             dtype=par[var].dtype) for var in par.keys()}
         samples=list()
         epsilon=self.step_size
@@ -80,9 +39,9 @@ class sgld(base):
                 epsilon=self.step_size*((30 + j) ** (-0.55))
                 #epsilon=0.9*epsilon
                 momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
-                cumulative_loss += nd.sum(loss).asscalar()
+                cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
-            loss_val[i]=cumulative_loss/n_examples
+            loss_val[i]=cumulative_loss
             file_name=chain_name+'_sgld_epoch_'+str(i)+'_.params'
             self.model.net.save_parameters(file_name)
             samples.append(file_name)
@@ -95,8 +54,9 @@ class sgld(base):
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)
             grad = par[var].grad/ batch_size
+            grad = np.nan_to_num(grad).as_nd_ndarray()
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
-            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)+normal[var]
+            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
             #par[var][:]=par[var]-self.step_size*grad+normal[var]
 
 
