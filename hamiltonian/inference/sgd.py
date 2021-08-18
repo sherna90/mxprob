@@ -1,6 +1,6 @@
 import numpy as np
 import mxnet as mx
-from mxnet import nd, autograd, gluon,npx
+from mxnet import nd, autograd, gluon
 from mxnet.ndarray import clip
 from tqdm import tqdm, trange
 from copy import deepcopy
@@ -55,7 +55,10 @@ class sgd(base):
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
             y_hat=self.model.predict(par,X_test)
-            total_loglike.append(y_hat.log_prob(y_test).asnumpy())
+            if isinstance(y_hat.sample(),mx.numpy.ndarray):
+                total_loglike.append(y_hat.log_prob(y_test.as_np_ndarray()).asnumpy())
+            else:
+                total_loglike.append(y_hat.log_prob(y_test).asnumpy())
             if X_test.shape[0]==batch_size:
                 samples=[]
                 for _ in range(num_samples):

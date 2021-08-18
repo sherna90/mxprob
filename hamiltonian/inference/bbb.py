@@ -22,7 +22,7 @@ class bbb(base):
         means=deepcopy(self.start)
         means_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
         std_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
-        stds={var:nd.random.normal(shape=means[var].as_nd_ndarray().shape,ctx=self.ctx) for var in means.keys()}
+        stds={var:nd.random.normal(shape=means[var].shape,ctx=self.ctx) for var in means.keys()}
         for var in means.keys():
             means[var].attach_grad()
             stds[var].attach_grad()
@@ -39,8 +39,9 @@ class bbb(base):
                     epsilons={var:nd.random.normal(shape=means[var].as_nd_ndarray().shape, loc=0., scale=1.0,ctx=self.ctx) for var in means.keys()}
                     for var in means.keys():
                         sigmas[var][:]=self.softplus(stds[var])
-                        par[var][:]=means[var] + (stds[var] * epsilons[var]) 
-                    loss = self.loss(par,means,sigmas,n_examples,batch_size,X_train=X_batch,y_train=y_batch)
+                        par[var][:]=means[var].as_nd_ndarray() + (stds[var] * epsilons[var])
+                    loss = self.model.loss(par,X_train=X_batch,y_train=y_batch) 
+                    #loss = self.loss(par,means,sigmas,n_examples,batch_size,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus meansametros. por retropropagacion
                 #loss es el gradiente
                 means_momentum, means = self.step(batch_size,means_momentum, means)
@@ -61,6 +62,9 @@ class bbb(base):
             elif k=='y_train':
                 y_train=v
         num_batches=n_data/batch_size
+        for var in self.model.par.keys():
+            if type(self.model.par[var])=='mxnet.numpy.ndarray':
+                par.update({var:par[var].as_np_ndarray()})
         log_likelihood_sum=self.model.negative_log_likelihood(par,X_train=X_train,y_train=y_train)
         log_prior_sum=self.model.negative_log_prior(par,X_train=X_train,y_train=y_train)
         log_var_posterior=list()
@@ -89,19 +93,22 @@ class bbb(base):
             labels=[]
             loglike=[]
             par=dict()
-            for name,gluon_par in self.model.net.collect_params().items():
+            for var in means.keys():
                 par.update({var:posterior[var].sample().as_nd_ndarray()})
             for X_test,y_test in data_loader:
                 X_test=X_test.as_in_context(self.ctx)
                 y_test=y_test.as_in_context(self.ctx)
                 y_pred=self.model.predict(par,X_test)
-                loglike.append(y_pred.log_prob(y_test).asnumpy())
+                if isinstance(y_pred.sample(),mx.numpy.ndarray):
+                    loglike.append(y_pred.log_prob(y_test.as_np_ndarray()).asnumpy())
+                else:
+                    loglike.append(y_pred.log_prob(y_test).asnumpy())
                 samples.append(y_pred.sample().asnumpy())
                 labels.append(y_test.asnumpy())
-            total_samples.append(samples)
-            total_loglike.append(loglike)
-            total_labels.append(labels)
-        total_samples=np.stack(total_samples)
-        total_loglike=np.stack(total_loglike)
-        total_labels=np.stack(total_labels)
+            total_samples.append(np.concatenate(samples))
+            total_loglike.append(np.concatenate(loglike))
+            total_labels.append(np.concatenate(labels))
+        #total_samples=np.stack(total_samples)
+        #total_loglike=np.stack(total_loglike)
+        #total_labels=np.stack(total_labels)
         return total_samples,total_labels,total_loglike

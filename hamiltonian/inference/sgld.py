@@ -54,7 +54,7 @@ class sgld(base):
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)
             grad = par[var].grad/ batch_size
-            grad = np.nan_to_num(grad).as_nd_ndarray()
+            #grad = np.nan_to_num(grad).as_nd_ndarray()
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
             #par[var][:]=par[var]-self.step_size*grad+normal[var]
@@ -99,7 +99,10 @@ class sgld(base):
                 X_test=X_test.as_in_context(self.ctx)
                 y_test=y_test.as_in_context(self.ctx)
                 y_pred=self.model.predict(par,X_test)
-                loglike.append(y_pred.log_prob(y_test).asnumpy())
+                if isinstance(y_pred.sample(),mx.numpy.ndarray):
+                    loglike.append(y_pred.log_prob(y_test.as_np_ndarray()).asnumpy())
+                else:
+                    loglike.append(y_pred.log_prob(y_test).asnumpy())
                 samples.append(y_pred.sample().asnumpy())
                 labels.append(y_test.asnumpy())
             total_samples.append(np.concatenate(samples))

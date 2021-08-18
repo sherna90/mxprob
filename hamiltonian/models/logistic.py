@@ -3,10 +3,9 @@ warnings.filterwarnings("ignore")
 
 import numpy as np
 import mxnet as mx
-from mxnet import nd, autograd, gluon,npx
+from mxnet import nd, autograd, gluon
 import mxnet.gluon.probability as mxp
-npx.set_np()
-               
+
 
 class logistic():
     
@@ -29,9 +28,6 @@ class logistic():
             gluon_par.grad_req='null'
         return par
 
-    def sigmoid(self,y_linear):
-        return 1. / (1. + np.exp(-y_linear))
-
     def predict(self, par,X,prob=False):
         y_hat=self.forward(par,X_train=X)   
         return y_hat	
@@ -41,14 +37,16 @@ class logistic():
         dtype=set([self.par[var].dtype for var in self.par.keys()]).pop()
         for k,v in args.items():
             if k=='X_train':
-                X_train=np.array(v).astype(dtype)
-                #X=nd.array(v,ctx=self.ctx)
+                X_train=v
         for name,gluon_par in self.net.collect_params().items():
             if name in par.keys():
-                gluon_par.set_data(par[name])
+                if isinstance(gluon_par.data(),mx.numpy.ndarray):
+                    gluon_par.set_data(par[name].as_np_ndarray())
+                else:
+                    gluon_par.set_data(par[name])
         y_linear = self.net.forward(X_train)
-        yhat = self.sigmoid(y_linear)
-        yhat=nd.clip(yhat.as_nd_ndarray(),eps,1.-eps)
+        yhat = nd.sigmoid(y_linear)
+        yhat=nd.clip(yhat,eps,1.-eps)
         cat=mxp.Binomial(n=1,prob=yhat)
         return cat
      
@@ -69,7 +67,7 @@ class logistic():
             elif k=='y_train':
                 y=v
         y_hat = self.forward(par,X_train=X)
-        return -nd.sum(y_hat.log_prob(y).as_nd_ndarray().astype(dtype))
+        return -nd.sum(y_hat.log_prob(y.as_np_ndarray()).as_nd_ndarray()).astype(dtype)
         
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
