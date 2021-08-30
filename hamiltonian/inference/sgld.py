@@ -17,7 +17,7 @@ class sgld(base):
         if 'chain_name' in args:
             chain_name=args['chain_name']
         else:
-            chain_name='chain_'+str(np.random.randint(1000)) 
+            chain_name='chain_{0:03d}_'.format(np.random.randint(100)) 
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         par=self.model.par
@@ -43,7 +43,7 @@ class sgld(base):
                 cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss
-            file_name=chain_name+'_sgld_epoch_'+str(i)+'_.params'
+            file_name=chain_name+'{0:03d}_.params'.format(i)
             self.model.net.save_parameters(file_name)
             samples.append(file_name)
             if verbose and (i%(epochs/10)==0):
@@ -75,7 +75,7 @@ class sgld(base):
         loss_values=list()
         for i in range(chains):
             if 'chain_name' in args:
-                args['chain_name']=args['chain_name']+"_"+str(i)
+                args['chain_name']=args['chain_name']+"_{0:03d}_".format(i)
             _,loss,samples=self.fit(epochs=epochs,batch_size=batch_size,
                 verbose=verbose,**args)
             self.model.par=self.model.reset(self.model.net)
@@ -113,7 +113,7 @@ class sgld(base):
         total_loglike=np.stack(total_loglike)
         return total_samples,total_labels,total_loglike
 
-    def posterior_diagnostics(self,posterior_samples,serialize=False):
+    def posterior_diagnostics(self,posterior_samples,serialize=False,file_name='posterior_samples.h5'):
         chains=len(posterior_samples)
         posterior_samples_multiple_chains=list()
         for i in range(chains):
@@ -127,7 +127,7 @@ class sgld(base):
             posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
         if serialize:
             samples = {var:np.concatenate([posterior_samples_multiple_chains_expanded[i][var] for i in range(len(posterior_samples_multiple_chains_expanded))]) for var in self.model.par}
-            df=h5py.File('posterior_samples.h5','w')
+            df=h5py.File(file_name,'w')
             dset=[df.create_dataset(var,data=samples[var]) for var in samples.keys()]
             df.close()
             return df
