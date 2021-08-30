@@ -34,8 +34,8 @@ transform = transforms.Compose([
     transforms.Normalize(0.,1.)
 ])
 
-num_gpus = 1
-model_ctx = mx.gpu()
+num_gpus = 0
+model_ctx = mx.cpu()
 num_epochs=100
 num_workers = 4
 batch_size = 256 

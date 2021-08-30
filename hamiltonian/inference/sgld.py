@@ -5,6 +5,7 @@ from mxnet.ndarray import clip
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
+import h5py
 
 class sgld(base):
 
@@ -112,7 +113,7 @@ class sgld(base):
         total_loglike=np.stack(total_loglike)
         return total_samples,total_labels,total_loglike
 
-    def posterior_diagnostics(self,posterior_samples):
+    def posterior_diagnostics(self,posterior_samples,serialize=False):
         chains=len(posterior_samples)
         posterior_samples_multiple_chains=list()
         for i in range(chains):
@@ -124,4 +125,11 @@ class sgld(base):
             posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
             posterior_samples_multiple_chains.append(posterior_samples_single_chain)
             posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
-        return posterior_samples_multiple_chains_expanded
+        if serialize:
+            samples = {var:np.concatenate([posterior_samples_multiple_chains_expanded[i][var] for i in range(len(posterior_samples_multiple_chains_expanded))]) for var in self.model.par}
+            df=h5py.File('posterior_samples.h5','w')
+            dset=[df.create_dataset(var,data=samples[var]) for var in samples.keys()]
+            df.close()
+            return df
+        else:
+            return posterior_samples_multiple_chains_expanded
