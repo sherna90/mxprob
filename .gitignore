@@ -139,3 +139,5 @@ benchmark/results/*
 **results
 
 scripts/results
+scripts/*.params
+
