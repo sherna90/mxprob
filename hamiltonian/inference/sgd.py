@@ -5,7 +5,8 @@ from mxnet.ndarray import clip
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
-
+import h5py 
+import os 
 
 class sgd(base):
 
@@ -16,6 +17,14 @@ class sgd(base):
             verbose=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
+        if 'chain_name' in args:
+            if os.path.exists(args['chain_name']):
+                os.remove(args['chain_name'])
+            posterior_samples=h5py.File(args['chain_name'])
+        else:
+            if os.path.exists(args['map_estimate.h5']):
+                os.remove(args['map_estimate.h5'])
+            posterior_samples=h5py.File('map_estimate.h5')
         par=self.model.par
         for var in self.model.par.keys():
             par[var].attach_grad()
@@ -35,6 +44,10 @@ class sgd(base):
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
+        dset=[posterior_samples.create_dataset(var,data=par[var].asnumpy()) for var in par.keys()]
+        posterior_samples.attrs['epochs']=epochs
+        posterior_samples.flush()
+        posterior_samples.close()
         return par,loss_val
 
     
