@@ -15,6 +15,14 @@ class sgld(base):
             verbose=args['verbose']
         else:
             verbose=None
+        if 'chain' in args:
+            chain=args['chain']
+        else:
+            chain=None
+        if 'dataset' in args:
+            dataset=args['dataset']
+        else:
+            dataset=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         par=self.model.par
@@ -23,7 +31,7 @@ class sgld(base):
         j=0
         momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
             dtype=par[var].dtype) for var in par.keys()}
-        single_chain={var:list() for var in par.keys()}
+        #single_chain={var:list() for var in par.keys()}
         epsilon=self.step_size
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
@@ -39,18 +47,19 @@ class sgld(base):
                 cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
-            for var in par.keys():
-                single_chain[var].append(par[var].asnumpy())
+            if dataset:
+                for var in par.keys():
+                    dataset[var][chain,i,:]=par[var].asnumpy()
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-        posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
-        return par,loss_val,posterior_samples_single_chain
+        #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
+        return par,loss_val
 
     def step(self,n_data,batch_size,momentum,epsilon,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)
-            grad = par[var].grad
+            grad = par[var].grad/batch_size
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
         return momentum, par
@@ -68,20 +77,21 @@ class sgld(base):
         if 'chain_name' in args:
             if os.path.exists(args['chain_name']):
                 os.remove(args['chain_name'])
-            posterior_samples=h5py.File(args['chain_name'])
+            posterior_samples=h5py.File(args['chain_name'],'w')
         else:
             if os.path.exists('posterior_samples.h5'):
                 os.remove('posterior_samples.h5')
-            posterior_samples=h5py.File('posterior_samples.h5')
+            posterior_samples=h5py.File('posterior_samples.h5','w')
+        dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+self.model.par[var].shape,dtype=self.model.par[var].dtype) for var in self.model.par.keys()]
         for i in range(chains):
-            _,loss,posterior_samples_single_chain=self.fit(epochs=epochs,batch_size=batch_size,
-                verbose=verbose,**args)
+            _,loss=self.fit(epochs=epochs,batch_size=batch_size,
+                chain=i,dataset=posterior_samples,verbose=verbose,**args)
             loss_values.append(loss)
             self.model.par=self.model.reset(self.model.net)
-            posterior_samples_multiple_chains.append(posterior_samples_single_chain)
-        posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
-        samples = {var:np.concatenate([posterior_samples_multiple_chains_expanded[i][var] for i in range(len(posterior_samples_multiple_chains_expanded))]) for var in self.model.par}
-        dset=[posterior_samples.create_dataset(var,data=samples[var]) for var in samples.keys()]
+            #posterior_samples_multiple_chains.append(posterior_samples_single_chain)
+        #posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
+        #samples = {var:np.concatenate([posterior_samples_multiple_chains_expanded[i][var] for i in range(len(posterior_samples_multiple_chains_expanded))]) for var in self.model.par}
+        #dset=[posterior_samples.create_dataset(var,data=samples[var]) for var in samples.keys()]
         posterior_samples.attrs['num_chains']=chains
         posterior_samples.attrs['num_samples']=epochs 
         posterior_samples.flush()
@@ -125,5 +135,5 @@ class sgld(base):
         for i in range(num_chains):
             posterior_samples_single_chain={var:posterior_samples[var][:] for var in self.model.par}
             posterior_samples_multiple_chains.append(posterior_samples_single_chain)
-            posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
+        posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
         return posterior_samples_multiple_chains_expanded

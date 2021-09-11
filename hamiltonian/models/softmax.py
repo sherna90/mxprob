@@ -132,6 +132,18 @@ class resnet_softmax(softmax):
             par=self.reset(net)
         return net,par
 
+class hierarchical_resnet(resnet_softmax):
+    
+    def negative_log_prior(self, par,**args):
+        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        prior=mxp.Gamma(shape=1.0,scale=1.0)
+        for var in par.keys():
+            means=nd.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=1./prior.sample(par[var].shape).copyto(self.ctx)
+            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
+            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
+        return log_prior
+        
 class lenet(softmax):
     
     def __init__(self,_hyper,in_units=(1,28,28),out_units=10,ctx=mx.cpu()):

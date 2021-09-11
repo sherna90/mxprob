@@ -60,5 +60,27 @@ class linear_aleatoric(linear):
         y_hat=mxp.normal.Normal(loc=y_mean,scale=y_scale)
         return y_hat
 
-     
+
+class lstm_linear(linear):
     
+    def __init__(self,_hyper,in_units,n_layers,n_hidden,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.net,self.par  = self._init_net(in_units,n_layers,n_hidden)
+        
+    def _init_net(self,in_units,n_layers,n_hidden,vocab_size,embedding_dim):
+        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net.add(gluon.nn.Embedding(input_dim=vocab_size, output_dim=embedding_dim))#capa de entrada
+        net.add(gluon.nn.GlobalMaxPool1D())
+        net.add(gluon.nn.Dense(n_hidden,in_units=embedding_dim,activation='relu'))
+        for i in range(1,n_layers):
+            net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='sigmoid'))
+        net.add(gluon.nn.Dense(1,in_units=n_hidden))
+        #net.add(gluon.nn.Dense(32,in_units=in_units,activation='relu'))
+        #net.add(gluon.nn.Dense(out_units,in_units=4, activation='sigmoid'))
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=dict()
+        for name,gluon_par in net.collect_params().items():
+            par.update({name:gluon_par.data()})
+            gluon_par.grad_req='null'
+        return net,par

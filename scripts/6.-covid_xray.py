@@ -21,6 +21,7 @@ from hamiltonian.utils.psis import *
 import matplotlib.pyplot as plt
 import seaborn as sns
 import glob
+import h5py 
 
 from sklearn.metrics import classification_report
 from sklearn.metrics import f1_score
@@ -70,11 +71,12 @@ print('SGD Resnet')
 
 model=resnet_softmax(hyper,in_units,out_units,n_layers,pre_trained,ctx=model_ctx)
 inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
-train_sgd=False
-num_epochs=10
+train_sgd=True
+num_epochs=250
 
 if train_sgd:
-    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data_loader,verbose=True)
+    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
+    data_loader=train_data_loader,chain_name='resnet_map.h5',verbose=True)
 
     fig=plt.figure(figsize=[5,5])
     plt.plot(loss,color='blue',lw=3)
@@ -84,14 +86,13 @@ if train_sgd:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgd_covid.pdf', bbox_inches='tight')
-    model.net.save_parameters('../scripts/results/covid/covid_sgd_'+str(num_epochs)+'_epochs.params')
 else:
-    model.net.load_parameters('../scripts/results/covid/covid_sgd_'+str(num_epochs)+'_epochs.params',ctx=model_ctx)
-    par=dict()
-    for name,gluon_par in model.net.collect_params().items():
-        par.update({name:gluon_par.data()})
-    
-total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=train_data_loader)
+    map_estimate=h5py.File('resnet_map.h5','r')
+    par={var:map_estimate[var][:] for var in map_estimate.keys()}
+    map_estimate.close()
+
+total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,
+    num_samples=100,data_loader=valid_data_loader)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 score=[]
@@ -113,12 +114,12 @@ model=resnet_softmax(hyper,in_units,out_units,n_layers,pre_trained,ctx=model_ctx
 inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=10
+num_epochs=250
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data_loader,
-                                verbose=True,chain_name='chain_nonhierarchical')
+                                verbose=True,chain_name='resnet_posterior_nonhierarchical.h5')
 
     plt.rcParams['figure.dpi'] = 360
     sns.set_style("whitegrid")
@@ -131,22 +132,48 @@ if train_sgld:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgld_covid.pdf', bbox_inches='tight')
-else:
-    chain1=glob.glob("../scripts/results/covid/chain_nonhierarchical_0_1_sgld*")
-    chain2=glob.glob("../scripts/results/covid/chain_nonhierarchical_0_sgld*")
-    posterior_samples=[chain1,chain2]
 
-posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
-total_samples,total_labels,log_like=inference.predict(posterior_samples_flat,5,data_loader=val_data)
+
+posterior_samples=h5py.File('resnet_posterior_nonhierarchical.h5','r')
+total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=valid_data_loader)
+posterior_samples.close()
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 
-score=[]
-for q in np.arange(.1,.9,.1):
-    y_hat=np.quantile(total_samples,q,axis=0)
-    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
-print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
+
+print('#####################################################################################')
+print('SGLD Hierarchical Resnet')
+
+from hamiltonian.inference.sgld import sgld
+from hamiltonian.models.softmax import hierarchical_resnet
+
+model=hierarchical_resnet(hyper,in_units,out_units,n_layers,pre_trained,ctx=model_ctx)
+inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
+
+train_sgld=True
+num_epochs=250
+
+if train_sgld:
+    loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
+                                data_loader=train_data_loader,
+                                verbose=True,chain_name='resnet_posterior_hierarchical.h5')
+
+    plt.rcParams['figure.dpi'] = 360
+    sns.set_style("whitegrid")
+    fig=plt.figure(figsize=[5,5])
+    plt.plot(loss[0],color='blue',lw=3)
+    plt.plot(loss[1],color='red',lw=3)
+    plt.xlabel('Epoch', size=18)
+    plt.ylabel('Loss', size=18)
+    plt.title('SGLD Resnet COVID', size=18)
+    plt.xticks(size=14)
+    plt.yticks(size=14)
+    plt.savefig('sgld_covid.pdf', bbox_inches='tight')
 
 
-
+posterior_samples=h5py.File('resnet_posterior_hierarchical.h5','r')
+total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=valid_data_loader)
+posterior_samples.close()
+y_hat=np.quantile(total_samples,.5,axis=0)
+print(classification_report(np.int32(total_labels),np.int32(y_hat)))
