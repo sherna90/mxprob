@@ -41,9 +41,9 @@ class sgld(base):
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
-                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                loss.backward()
                 epsilon=self.step_size*((30 + j) ** (-0.55))
-                momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
+                momentum,par=self.step(batch_size,momentum,epsilon,par)
                 cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
@@ -55,15 +55,24 @@ class sgld(base):
         #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
         return par,loss_val
 
-    def step(self,n_data,batch_size,momentum,epsilon,par):
+    def preconditioned_step(self,batch_size,momentum,epsilon,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)
             grad = par[var].grad/batch_size
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
-            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
+            par[var][:]=par[var]-epsilon*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
         return momentum, par
 
+    def step(self,batch_size,momentum,epsilon,par):
+        normal=self.draw_momentum(par,epsilon)
+        for var in par.keys():
+            #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
+            grad=par[var].grad.as_nd_ndarray()
+            momentum[var][:] = self.gamma * momentum[var] + epsilon * grad #calcula para parametros peso y bias
+            par[var][:]=par[var]-momentum[var]+normal[var].as_nd_ndarray()
+        return momentum, par
+        
     def draw_momentum(self,par,epsilon):
         momentum={var:np.sqrt(epsilon)*random.normal(0,1,
             shape=par[var].shape,
