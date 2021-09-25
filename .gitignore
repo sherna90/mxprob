@@ -133,11 +133,11 @@ data/
 data/*
 
 
-benchamrks/
-benchmark/*.h5
+benchamrks/*.pdf
+benchmarks/*.h5
 
-**results
 
-scripts/
+
+scripts/*.pdf
 scripts/*.h5
 
