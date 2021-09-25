@@ -20,11 +20,11 @@ class sgd(base):
         if 'chain_name' in args:
             if os.path.exists(args['chain_name']):
                 os.remove(args['chain_name'])
-            posterior_samples=h5py.File(args['chain_name'])
+            posterior_samples=h5py.File(args['chain_name'],'w')
         else:
             if os.path.exists(args['map_estimate.h5']):
                 os.remove(args['map_estimate.h5'])
-            posterior_samples=h5py.File('map_estimate.h5')
+            posterior_samples=h5py.File('map_estimate.h5','w')
         par=self.model.par
         for var in self.model.par.keys():
             par[var].attach_grad()
