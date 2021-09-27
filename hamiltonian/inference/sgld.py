@@ -41,9 +41,9 @@ class sgld(base):
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
-                loss.backward()
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 epsilon=self.step_size*((30 + j) ** (-0.55))
-                momentum,par=self.step(batch_size,momentum,epsilon,par)
+                momentum,par=self.step(n_examples,batch_size,momentum,epsilon,self.model.par)
                 cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
@@ -55,24 +55,15 @@ class sgld(base):
         #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
         return par,loss_val
 
-    def preconditioned_step(self,batch_size,momentum,epsilon,par):
+    def step(self,n_data,batch_size,momentum,epsilon,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
-            #grad = clip(par[var].grad, -1e3,1e3)
-            grad=par[var].grad.as_nd_ndarray()
+            #grad = clip(par[var].grad, -1e3,1e3)                                                                                                                                               
+            grad = par[var].grad/batch_size
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
         return momentum, par
 
-    def step(self,batch_size,momentum,epsilon,par):
-        normal=self.draw_momentum(par,epsilon)
-        for var in par.keys():
-            #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
-            grad=par[var].grad.as_nd_ndarray()
-            momentum[var][:] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
-            par[var][:]=par[var]-momentum[var]+normal[var].as_nd_ndarray()
-        return momentum, par
-        
     def draw_momentum(self,par,epsilon):
         momentum={var:np.sqrt(epsilon)*random.normal(0,1,
             shape=par[var].shape,
@@ -81,7 +72,7 @@ class sgld(base):
         return momentum
 
     def sample(self,epochs=1,batch_size=1,chains=2,verbose=False,**args):
-        loss_values=list()
+        loss_values=list()                                                                                                              
         posterior_samples_multiple_chains=list()
         if 'chain_name' in args:
             if os.path.exists(args['chain_name']):
@@ -94,13 +85,13 @@ class sgld(base):
         dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+self.model.par[var].shape,dtype=self.model.par[var].dtype) for var in self.model.par.keys()]
         for i in range(chains):
             #self.model.par=self.model.reset(self.model.net)
-            for var in self.start.keys():
+            for var in self.model.par.keys():
                 self.model.par[var]=nd.array(self.start[var],ctx=self.ctx)
             _,loss=self.fit(epochs=epochs,batch_size=batch_size,
                 chain=i,dataset=posterior_samples,verbose=verbose,**args)
             loss_values.append(loss)
         posterior_samples.attrs['num_chains']=chains
-        posterior_samples.attrs['num_samples']=epochs
+        posterior_samples.attrs['num_samples']=epochs 
         posterior_samples.attrs['loss']=np.stack(loss_values) 
         posterior_samples.flush()
         posterior_samples.close()  
