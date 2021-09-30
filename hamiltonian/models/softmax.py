@@ -133,6 +133,7 @@ class resnet_softmax(softmax):
         return net,par
 
 class hierarchical_resnet(resnet_softmax):
+
     
     def negative_log_prior(self, par,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)

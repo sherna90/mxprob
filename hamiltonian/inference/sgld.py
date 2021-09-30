@@ -2,6 +2,7 @@ import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon,random
 from mxnet.ndarray import clip
+import mxnet.gluon.probability as mxp
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
@@ -55,11 +56,12 @@ class sgld(base):
         #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
         return par,loss_val
 
+
     def step(self,n_data,batch_size,momentum,epsilon,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             #grad = clip(par[var].grad, -1e3,1e3)                                                                                                                                               
-            grad = par[var].grad/batch_size
+            grad = par[var].grad.as_nd_ndarray()
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
         return momentum, par
@@ -136,3 +138,57 @@ class sgld(base):
             posterior_samples_multiple_chains.append(posterior_samples_single_chain)
         posterior_samples_multiple_chains_expanded=[ {var:np.expand_dims(sample,axis=0) for var,sample in posterior.items()} for posterior in posterior_samples_multiple_chains]
         return posterior_samples_multiple_chains_expanded
+
+class hierarchical_sgld(sgld):
+    
+    def fit(self,epochs=1,batch_size=1,**args):
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
+        if 'chain' in args:
+            chain=args['chain']
+        else:
+            chain=None
+        if 'dataset' in args:
+            dataset=args['dataset']
+        else:
+            dataset=None
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        means=self.model.par
+        prior=mxp.HalfNormal(scale=1.0)
+        stds={var:prior.sample(means[var].shape).copyto(self.ctx) for var in means.keys()}
+        for var in self.model.par.keys():
+            means[var].attach_grad()
+            stds[var].attach_grad()
+        j=0
+        mean_momentum={var:means[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
+            dtype=means[var].dtype) for var in means.keys()}
+        std_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
+        for i in tqdm(range(epochs)):
+            data_loader,n_examples=self._get_loader(**args)
+            cumulative_loss=0
+            for X_batch, y_batch in data_loader:
+                X_batch=X_batch.as_in_context(self.ctx)
+                y_batch=y_batch.as_in_context(self.ctx)
+                par={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
+                with autograd.record():
+                    epsilons={var:nd.random.normal(shape=means[var].as_nd_ndarray().shape, loc=0., scale=1.0,ctx=self.ctx) for var in means.keys()}
+                    for var in means.keys():
+                        par[var][:]=means[var].as_nd_ndarray() + (stds[var].as_nd_ndarray() * epsilons[var])
+                    loss = self.loss(par,X_train=X_batch,y_train=y_batch)
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                lr_decay=self.step_size*((30 + j) ** (-0.55))
+                mean_momentum,means=self.step(n_examples,batch_size,mean_momentum,lr_decay,means)
+                std_momentum, stds = self.step(n_examples,batch_size,std_momentum,lr_decay, stds)
+                cumulative_loss += nd.mean(loss).asscalar()
+                j=j+1
+            loss_val[i]=cumulative_loss/n_examples
+            if dataset:
+                for var in par.keys():
+                    dataset[var][chain,i,:]=par[var].asnumpy()
+            if verbose and (i%(epochs/1)==0):
+                print('loss: {0:.4f}'.format(loss_val[i]))
+        #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
+        return par,loss_val

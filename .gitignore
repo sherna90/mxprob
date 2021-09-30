@@ -135,7 +135,7 @@ data/*
 
 benchamrks/*.pdf
 benchmarks/*.h5
-
+benchmarks/results/*
 
 
 scripts/*.pdf
