@@ -185,7 +185,7 @@ class hierarchical_lenet(lenet):
         for var in par.keys():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
             param_prior=mxp.normal.Normal(loc=means,scale=stds[var])
-            log_prior=log_prior-nd.mean(param_prior.log_prob(nd.array(par[var])).as_nd_ndarray())-nd.mean(prior.log_prob(stds[var]).as_nd_ndarray())
+            log_prior=log_prior-nd.mean(param_prior.log_prob(nd.array(par[var]).as_in_context(self.ctx)).as_nd_ndarray())-nd.mean(prior.log_prob(stds[var]).as_nd_ndarray())
         return log_prior
 
 class vgg_softmax(softmax):
