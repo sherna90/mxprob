@@ -51,7 +51,7 @@ val_data = gluon.data.DataLoader(
 
 
 hyper={'alpha':10.}
-in_units=(28,28)
+in_units=(1,28,28)
 out_units=10
 
 
@@ -77,7 +77,7 @@ if train_sgd:
     plt.savefig('sgd_lenet.pdf', bbox_inches='tight')
 else:
     map_estimate=h5py.File('lenet_map.h5','r')
-    par={var:map_estimate[var][:] for var in map_estimate.keys()}
+    par={var:nd.array(map_estimate[var][:]) for var in map_estimate.keys()}
     map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
@@ -89,13 +89,13 @@ print('Stochastic Gradient Langevin Dynamics')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,par,step_size=0.01,ctx=model_ctx)
 
-train_sgld=False
+train_sgld=True
 num_epochs=100
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
-                                verbose=True,chain_name='lenet_nonhierarchical.h5')
+                                verbose=True,chain_name='lenet_posterior.h5')
 
     plt.rcParams['figure.dpi'] = 360
     sns.set_style("whitegrid")
@@ -110,7 +110,7 @@ if train_sgld:
     plt.savefig('sgld_lenet.pdf', bbox_inches='tight')
 
 
-posterior_samples=h5py.File('lenet_nonhierarchical.h5','r')
+posterior_samples=h5py.File('lenet_posterior.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))

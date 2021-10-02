@@ -181,7 +181,7 @@ class hierarchical_sgld(sgld):
                     for var in means.keys():
                         sigmas[var]=self.softplus(stds[var])
                         par[var][:]=means[var].as_nd_ndarray() + (sigmas[var] * epsilons[var])
-                    loss = self.loss(par,sigmas,X_train=X_batch,y_train=y_batch)
+                    loss = self.hierarchical_loss(par,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 lr_decay=self.step_size*((30 + j) ** (-0.55))
                 mean_momentum,means=self.step(n_examples,batch_size,mean_momentum,lr_decay,means)
