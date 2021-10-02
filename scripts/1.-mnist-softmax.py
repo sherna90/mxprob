@@ -4,30 +4,33 @@
 import sys
 sys.path.append("../") 
 
-import argparse, time, logging, random, math
 
 import numpy as np
 import mxnet as mx
+
 from mxnet import gluon, nd
 from mxnet import autograd as ag
 from mxnet.gluon import nn
 from mxnet.gluon.data.vision import transforms
 
+from sklearn.metrics import classification_report
+import h5py 
+
 import matplotlib.pyplot as plt
-import seaborn as sns
 plt.rcParams['figure.dpi'] = 360
-sns.set_style("whitegrid")
+import seaborn as sns
 
 import mxnet as mx
 from hamiltonian.inference.sgd import sgd
+from hamiltonian.models.softmax import softmax
 from hamiltonian.inference.sgld import sgld
-from hamiltonian.models.softmax import softmax,hierarchical_softmax
-
-from sklearn.metrics import classification_report
-from sklearn.metrics import f1_score
+from hamiltonian.models.softmax import hierarchical_softmax
+from hamiltonian.inference.sgld import hierarchical_sgld
 from hamiltonian.utils.psis import *
-import arviz as az
-import glob
+
+import tensorflow as tf
+import tensorflow_probability as tfp
+
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -36,11 +39,8 @@ transform = transforms.Compose([
 
 num_gpus = 0
 model_ctx = mx.cpu()
-num_epochs=100
-num_workers = 4
+num_workers = 0
 batch_size = 256 
-train_sgd=True
-
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
     batch_size=batch_size, shuffle=True, last_batch='discard', num_workers=num_workers)
@@ -49,18 +49,24 @@ val_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=False).transform_first(transform),
     batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
+
 hyper={'alpha':10.}
 in_units=(28,28)
 out_units=10
 
+
+print('#######################################')
+print('Stochastic Gradient Descent')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,model.par,step_size=0.01,ctx=model_ctx)
+inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
 
-print('#####################################################################################')
-print("SGD")
-if False:
-    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
+train_sgd=False
+num_epochs=100
+if train_sgd:
+    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
+                           data_loader=train_data,chain_name='mnist_map.h5',verbose=True)
 
+    plt.rcParams['figure.dpi'] = 360
     fig=plt.figure(figsize=[5,5])
     plt.plot(loss,color='blue',lw=3)
     plt.xlabel('Epoch', size=18)
@@ -69,32 +75,28 @@ if False:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgd_softmax.pdf', bbox_inches='tight')
-    model.net.save_parameters('results/softmax/softmax_sgd_'+str(num_epochs)+'_epochs.params')
 else:
-    model.net.load_parameters('results/softmax/softmax_sgd_'+str(num_epochs)+'_epochs.params',ctx=model_ctx)
-    par=dict()
-    for name,gluon_par in model.net.collect_params().items():
-        par.update({name:gluon_par.data()})
-               
+    map_estimate=h5py.File('mnist_map.h5','r')
+    par={var:map_estimate[var][:] for var in map_estimate.keys()}
+    map_estimate.close()
+
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
-score=[]
-for q in np.arange(.1,.9,.1):
-    y_hat=np.quantile(total_samples,q,axis=0)
-    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
+y_hat=np.quantile(total_samples,.5,axis=0)
+print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
-print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
-
-
-# # Stochastic Gradient Langevin Dynamics Softmax <a class="anchor" id="chapter2"></a>
-print('#####################################################################################')
-print('SGLD Non-hierarchical Softmax')
+print('#######################################')
+print('Stochastic Gradient Langevin Dynamics')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
+inference=sgld(model,par,step_size=0.001,ctx=model_ctx)
 
-if train_sgd:
+train_sgld=False
+num_epochs=100
+
+if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
-                                verbose=True,chain_name='chain_nonhierarchical')    
+                                verbose=True,chain_name='mnist_nonhierarchical.h5')
+
     plt.rcParams['figure.dpi'] = 360
     sns.set_style("whitegrid")
     fig=plt.figure(figsize=[5,5])
@@ -106,52 +108,79 @@ if train_sgd:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgld_softmax.pdf', bbox_inches='tight')
-else:
-    chain1=glob.glob("results/softmax/chain_nonhierarchical_0_1_sgld*")
-    chain2=glob.glob("results/softmax/chain_nonhierarchical_0_sgld*")
-    posterior_samples=[chain1,chain2]
 
-posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
-total_samples,total_labels,log_like=inference.predict(posterior_samples_flat,5,data_loader=val_data)
-posterior_samples_multiple_chains=inference.posterior_diagnostics(posterior_samples)
-datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains]
-dataset = az.concat(datasets, dim="chain")
-mean_r_hat_values={var:float(az.rhat(dataset)[var].mean().data) for var in model.par}
-mean_ess_values={var:float(az.ess(dataset)[var].mean().data) for var in model.par}
-mean_mcse_values={var:float(az.mcse(dataset)[var].mean().data) for var in model.par}
 
-print('SGLD Non-hierarchical Softmax')
-print('R_hat')
-print("\n".join("{}\t{}".format(k, v) for k, v in mean_r_hat_values.items()))
-print('ESS')
-print("\n".join("{}\t{}".format(k, v) for k, v in mean_ess_values.items()))
-print('MCSE')
-print("\n".join("{}\t{}".format(k, v) for k, v in mean_mcse_values.items()))
+posterior_samples=h5py.File('mnist_nonhierarchical.h5','r')
+total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
+y_hat=np.quantile(total_samples,.5,axis=0)
+print(classification_report(np.int32(total_labels),np.int32(y_hat)))
+
+
+samples={var:posterior_samples[var] for var in posterior_samples.keys()}
+samples={var:np.swapaxes(samples[var],0,1) for var in model.par}
+r_hat_estimate = lambda samples : tfp.mcmc.diagnostic.potential_scale_reduction(samples, independent_chain_ndims=1,split_chains=False).numpy()
+rhat = {var:r_hat_estimate(samples[var]) for var in model.par}
+
+labels, data = rhat.keys(), rhat.values()
+flatten_data=list()
+for d in data:
+    flatten_data.append(d.reshape(-1))
+
+plt.rcParams['figure.dpi'] = 360
+sns.set_style("whitegrid")
+plt.boxplot(flatten_data)
+plt.xticks(range(1, len(labels) + 1), labels)
+plt.title('Rhat')
+plt.savefig('rhat_nonhierarchical_softmax.pdf', bbox_inches='tight')
+
+median_rhat_flat={var:np.median(rhat[var]) for var in rhat}
+
+print('Rhat Non-Hierarchical Model',median_rhat_flat)
+
+ess_estimate = lambda samples : tfp.mcmc.diagnostic.effective_sample_size(samples, filter_beyond_positive_pairs=False,cross_chain_dims=1).numpy()
+ess = {var:ess_estimate(samples[var]) for var in model.par}
+
+median_ess_flat={var:np.median(ess[var]) for var in ess}
+print('ESS Non-Hierarchical Model',median_ess_flat)
+
+labels, data = ess.keys(), ess.values()
+flatten_data=list()
+for d in data:
+    flatten_data.append(d.reshape(-1))
+plt.rcParams['figure.dpi'] = 360
+sns.set_style("whitegrid")    
+plt.boxplot(flatten_data)
+plt.xticks(range(1, len(labels) + 1), labels)
+plt.title('ESS')
+plt.savefig('ess_nonhierarchical_softmax.pdf', bbox_inches='tight')
 
 loo,loos,ks=psisloo(log_like)
-score=[]
-for q in np.arange(.1,.9,.1):
-    y_hat=np.quantile(total_samples,q,axis=0)
-    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
-print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
+max_ks=max(ks[~ np.isinf(ks)])
+ks[np.isinf(ks)]=max_ks
+flat_ks_1=np.sum(ks>1)
+flat_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
+flat_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))
+flat_ks_5=np.sum(ks<0.5)
 
-score=[]
-for q in np.arange(.1,.9,.1):
-    y_hat=np.quantile(total_samples,q,axis=0)
-    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), sample_weight=1-np.clip(ks,0,1),average='weighted'))
-print('mean f-loo : {0}, std f-loo : {1}'.format(np.mean(score),2*np.std(score)))
 
-# # Stochastic Gradient Langevin Dynamics Hierarchical <a class="anchor" id="chapter3"></a>
-print('#####################################################################################')
-print('SGLD Hierarchical Softmax')
+print('#######################################')
+print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
-model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgld(model,model.par,step_size=0.01,ctx=model_ctx)
 
-if train_sgd:
+
+hierarchical_model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
+inference=hierarchical_sgld(hierarchical_model,par,step_size=0.001,ctx=model_ctx)
+
+train_sgld=False
+num_epochs=100
+
+if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
-                                verbose=True,chain_name='chain_hierarchical')
+                                verbose=True,chain_name='mnist_hierarchical.h5')
+
+    plt.rcParams['figure.dpi'] = 360
+    sns.set_style("whitegrid")
     fig=plt.figure(figsize=[5,5])
     plt.plot(loss[0],color='blue',lw=3)
     plt.plot(loss[1],color='red',lw=3)
@@ -161,36 +190,92 @@ if train_sgd:
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig('sgld_hierarchical_softmax.pdf', bbox_inches='tight')
-else:
-    chain1=glob.glob("results/softmax/chain_hierarchical_0_1_sgld*")
-    chain2=glob.glob("results/softmax/chain_hierarchical_0_sgld*")
-    posterior_samples=[chain1,chain2]
 
-posterior_samples_flat=[item for sublist in posterior_samples for item in sublist]
-total_samples,total_labels,log_like=inference.predict(posterior_samples_flat,5,data_loader=val_data)
-posterior_samples_multiple_chains=inference.posterior_diagnostics(posterior_samples)
-datasets=[az.convert_to_inference_data(sample) for sample in posterior_samples_multiple_chains]
-dataset = az.concat(datasets, dim="chain")
-mean_r_hat_values={var:float(az.rhat(dataset)[var].mean().data) for var in model.par}
-mean_ess_values={var:float(az.ess(dataset)[var].mean().data) for var in model.par}
-mean_mcse_values={var:float(az.mcse(dataset)[var].mean().data) for var in model.par}
 
-print('R_hat')
-print("\n".join("{}\t{}".format(k, v) for k, v in mean_r_hat_values.items()))
-print('ESS')
-print("\n".join("{}\t{}".format(k, v) for k, v in mean_ess_values.items()))
-print('MCSE')
-print("\n".join("{}\t{}".format(k, v) for k, v in mean_mcse_values.items()))
+posterior_samples=h5py.File('mnist_hierarchical.h5','r')
+total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
+y_hat=np.quantile(total_samples,.5,axis=0)
+print(classification_report(np.int32(total_labels),np.int32(y_hat)))
+
+samples={var:posterior_samples[var] for var in posterior_samples.keys()}
+samples={var:np.swapaxes(samples[var],0,1) for var in model.par}
+r_hat_estimate = lambda samples : tfp.mcmc.diagnostic.potential_scale_reduction(samples, independent_chain_ndims=1,split_chains=False).numpy()
+rhat = {var:r_hat_estimate(samples[var]) for var in model.par}
+
+median_rhat_hierarchical={var:np.median(rhat[var]) for var in rhat}
+median_rhat_hierarchical
+
+print('Rhat Hierarchical Model',median_rhat_hierarchical)
+
+labels, data = rhat.keys(), rhat.values()
+flatten_data=list()
+for d in data:
+    flatten_data.append(d.reshape(-1))
+
+plt.rcParams['figure.dpi'] = 360
+sns.set_style("whitegrid")
+plt.boxplot(flatten_data)
+plt.xticks(range(1, len(labels) + 1), labels)
+plt.title('Rhat')
+plt.savefig('rhar_hierarchical_softmax.pdf', bbox_inches='tight')
+
+
+ess_estimate = lambda samples : tfp.mcmc.diagnostic.effective_sample_size(samples, filter_beyond_positive_pairs=False,cross_chain_dims=1).numpy()
+ess = {var:ess_estimate(samples[var]) for var in model.par}
+median_ess_hierarchical={var:np.median(ess[var]) for var in ess}
+
+print('ESS Hierarchical Model',median_ess_hierarchical)
+
+labels, data = ess.keys(), ess.values()
+flatten_data=list()
+for d in data:
+    flatten_data.append(d.reshape(-1))
+
+plt.rcParams['figure.dpi'] = 360
+sns.set_style("whitegrid")
+plt.boxplot(flatten_data)
+plt.xticks(range(1, len(labels) + 1), labels)
+plt.title('ESS')
+plt.savefig('ess_hierarchical_softmax.pdf', bbox_inches='tight')
+
 
 loo,loos,ks=psisloo(log_like)
-score=[]
-for q in np.arange(.1,.9,.1):
-    y_hat=np.quantile(total_samples,q,axis=0)
-    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), average='macro'))
-print('mean f-1 : {0}, std f-1 : {1}'.format(np.mean(score),2*np.std(score)))
+max_ks=max(ks[~ np.isinf(ks)])
+ks[np.isinf(ks)]=max_ks
+hierarchical_ks_1=np.sum(ks>1)
+hierarchical_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
+hierarchical_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))
+hierarchical_ks_5=np.sum(ks<0.5)
 
-score=[]
-for q in np.arange(.1,.9,.1):
-    y_hat=np.quantile(total_samples,q,axis=0)
-    score.append(f1_score(np.int32(total_labels),np.int32(y_hat), sample_weight=1-np.clip(ks,0,1),average='weighted'))
-print('mean f-loo : {0}, std f-loo : {1}'.format(np.mean(score),2*np.std(score)))
+import pandas as pd
+
+hierarchical=[hierarchical_ks_1,hierarchical_ks_7_1,hierarchical_ks_5_7,hierarchical_ks_5]
+flat=[flat_ks_1,flat_ks_7_1,flat_ks_5_7,flat_ks_5]
+index = ['k>1', '0.7<k<1', '0.5<k<0.7','k<0.5']
+df = pd.DataFrame({'hierarchical': hierarchical,
+                   'non-hierarchical': flat}, index=index)
+ax = df.plot.bar(rot=0)
+plt.title('Pareto K shape')
+plt.savefig('pareto_k_softmax.pdf', bbox_inches='tight')
+
+import pandas as pd
+hierarchical=median_rhat_hierarchical.values()
+flat=median_rhat_flat.values()
+index = median_rhat_flat.keys()
+df = pd.DataFrame({'hierarchical': hierarchical,
+                   'non-hierarchical': flat}, index=index)
+ax = df.plot.bar(rot=0)
+plt.title('Potential Scale Reduction (Rhat)')
+plt.savefig('potential_scale_softmax.pdf', bbox_inches='tight')
+
+
+hierarchical=median_ess_hierarchical.values()
+flat=median_ess_flat.values()
+index = median_ess_flat.keys()
+df = pd.DataFrame({'hierarchical': hierarchical,
+                   'non-hierarchical': flat}, index=index)
+ax = df.plot.bar(rot=0)
+plt.title('ESS') 
+plt.savefig('ess_softmax.pdf', bbox_inches='tight')
+
+

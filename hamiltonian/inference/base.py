@@ -48,3 +48,7 @@ class base:
     def loss(self,par,X_train,y_train):
         batch_size=X_train.shape[0]
         return self.model.loss(par,X_train=X_train,y_train=y_train)*1/batch_size
+    
+    def loss(self,par,stds,X_train,y_train):
+        batch_size=X_train.shape[0]
+        return self.model.loss(par,stds,X_train=X_train,y_train=y_train)*1/batch_size

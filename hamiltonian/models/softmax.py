@@ -78,15 +78,19 @@ class softmax():
 
 
 class hierarchical_softmax(softmax):
-    
-    def negative_log_prior(self, par,**args):
+
+    def loss(self,par,stds,**args):
+        log_like=self.negative_log_likelihood(par,**args)
+        log_prior=self.negative_log_prior(par,stds,**args)
+        return log_like+log_prior
+
+    def negative_log_prior(self, par,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
-        prior=mxp.Gamma(shape=1.0,scale=1.0)
+        prior=mxp.HalfNormal(scale=1.0)
         for var in par.keys():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
-            sigmas=1./prior.sample(par[var].shape).copyto(self.ctx)
-            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
-            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
+            param_prior=mxp.normal.Normal(loc=means,scale=stds[var])
+            log_prior=log_prior-nd.mean(param_prior.log_prob(nd.array(par[var])).as_nd_ndarray())-nd.mean(prior.log_prob(stds[var]).as_nd_ndarray())
         return log_prior
 
 class mlp_softmax(softmax):
@@ -169,15 +173,19 @@ class lenet(softmax):
         return net,par
     
 class hierarchical_lenet(lenet):
-    
-    def negative_log_prior(self, par,**args):
+
+    def loss(self,par,stds,**args):
+        log_like=self.negative_log_likelihood(par,**args)
+        log_prior=self.negative_log_prior(par,stds,**args)
+        return log_like+log_prior
+
+    def negative_log_prior(self, par,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
-        prior=mxp.Gamma(shape=1.0,scale=1.0)
+        prior=mxp.HalfNormal(scale=1.0)
         for var in par.keys():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
-            sigmas=1./prior.sample(par[var].shape).copyto(self.ctx)
-            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
-            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())-nd.mean(prior.log_prob(sigmas).as_nd_ndarray())
+            param_prior=mxp.normal.Normal(loc=means,scale=stds[var])
+            log_prior=log_prior-nd.mean(param_prior.log_prob(nd.array(par[var])).as_nd_ndarray())-nd.mean(prior.log_prob(stds[var]).as_nd_ndarray())
         return log_prior
 
 class vgg_softmax(softmax):

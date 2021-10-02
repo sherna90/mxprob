@@ -25,3 +25,14 @@ def flatten(items):
         else:
             yield x
 
+def plot_diagnostics(diagnostics,title,file_name):
+    labels, data = diagnostics.keys(), diagnostics.values()
+    flatten_data=list()
+    for d in data:
+        flatten_data.append(d.reshape(-1))
+    plt.rcParams['figure.dpi'] = 360
+    sns.set_style("whitegrid")    
+    plt.boxplot(flatten_data)
+    plt.xticks(range(1, len(labels) + 1), labels)
+    plt.title(title)
+    plt.savefig(file_name, bbox_inches='tight')
