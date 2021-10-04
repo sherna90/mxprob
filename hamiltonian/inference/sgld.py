@@ -1,3 +1,4 @@
+from mxnet.ndarray.contrib import isnan
 import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon,random
@@ -159,11 +160,14 @@ class hierarchical_sgld(sgld):
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         means=self.model.par
-        prior=mxp.HalfNormal(scale=1.0)
-        stds={var:prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
+        scale_prior=mxp.HalfNormal(scale=1.0)
+        eps_prior=mxp.Normal(loc=0.,scale=1.0)
+        stds={var:scale_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
+        epsilons={var:eps_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
         for var in self.model.par.keys():
             means[var].attach_grad()
             stds[var].attach_grad()
+            epsilons[var].attach_grad()
         j=0
         mean_momentum={var:means[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
             dtype=means[var].dtype) for var in means.keys()}
@@ -177,15 +181,16 @@ class hierarchical_sgld(sgld):
                 par={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
                 sigmas={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
                 with autograd.record():
-                    epsilons={var:nd.random.normal(shape=means[var].as_nd_ndarray().shape, loc=0., scale=1.0,ctx=self.ctx) for var in means.keys()}
+                    #epsilons={var:nd.random.normal(shape=means[var].as_nd_ndarray().shape, loc=0., scale=1.0,ctx=self.ctx) for var in means.keys()}
                     for var in means.keys():
                         sigmas[var]=self.softplus(stds[var])
                         par[var][:]=means[var].as_nd_ndarray() + (sigmas[var] * epsilons[var])
-                    loss = self.hierarchical_loss(par,sigmas,X_train=X_batch,y_train=y_batch)
+                    loss = self.hierarchical_loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 lr_decay=self.step_size*((30 + j) ** (-0.55))
                 mean_momentum,means=self.step(n_examples,batch_size,mean_momentum,lr_decay,means)
-                std_momentum, stds = self.step(n_examples,batch_size,std_momentum,lr_decay, stds)
+                mean_momentum, stds = self.step(n_examples,batch_size,mean_momentum,lr_decay, stds)
+                mean_momentum, epsilons = self.step(n_examples,batch_size,mean_momentum,lr_decay, epsilons)
                 cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
