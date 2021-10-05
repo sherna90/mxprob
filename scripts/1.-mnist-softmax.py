@@ -171,7 +171,7 @@ print('Hierarchical Stochastic Gradient Langevin Dynamics')
 hierarchical_model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=hierarchical_sgld(hierarchical_model,par,step_size=0.001,ctx=model_ctx)
 
-train_sgld=False
+train_sgld=True
 num_epochs=100
 
 if train_sgld:
