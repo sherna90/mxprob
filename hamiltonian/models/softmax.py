@@ -70,7 +70,7 @@ class softmax():
             elif k=='y_train':
                 y=v
         y_hat = self.forward(par,X_train=X)
-        return -nd.nansum(y_hat.log_prob(y).as_nd_ndarray())
+        return -nd.nansum(y_hat.log_prob(y).as_nd_ndarray(),exclude=True)
         
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
@@ -82,22 +82,18 @@ class hierarchical_softmax(softmax):
 
     def loss(self,par,means,epsilons,stds,**args):
         log_like=self.negative_log_likelihood(par,**args)
-        log_prior=self.negative_log_prior(par,means,epsilons,stds,**args)
+        log_prior=self.negative_log_prior(means,epsilons,stds,**args)
         return log_like+log_prior
 
-    def negative_log_prior(self, par,means,epsilons,stds,**args):
+    def negative_log_prior(self, means,epsilons,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
         scale_prior=mxp.HalfNormal(scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
-        for var in par.keys():
-            #mu=nd.zeros(par[var].shape,ctx=self.ctx)
-            param_prior=mxp.normal.Normal(loc=means[var],scale=stds[var])
-            theta=nd.array(par[var]).as_in_context(self.ctx)
+        for var in means.keys():
             log_prior=log_prior-nd.mean(scale_prior.log_prob(stds[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(location_prior.log_prob(means[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(param_prior.log_prob(theta).as_nd_ndarray())
         return log_prior
 
 class mlp_softmax(softmax):
@@ -145,22 +141,20 @@ class resnet_softmax(softmax):
 
 class hierarchical_resnet(resnet_softmax):
 
-    def loss(self,par,means,stds,**args):
+    def loss(self,par,means,epsilons,stds,**args):
         log_like=self.negative_log_likelihood(par,**args)
-        log_prior=self.negative_log_prior(par,means,stds,**args)
+        log_prior=self.negative_log_prior(means,epsilons,stds,**args)
         return log_like+log_prior
 
-    def negative_log_prior(self, par,means,stds,**args):
+    def negative_log_prior(self, means,epsilons,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
         scale_prior=mxp.HalfNormal(scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
-        for var in par.keys():
-            #mu=nd.zeros(par[var].shape,ctx=self.ctx)
-            param_prior=mxp.normal.Normal(loc=means[var],scale=stds[var])
-            theta=nd.array(par[var]).as_in_context(self.ctx)
+        epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
+        for var in means.keys():
             log_prior=log_prior-nd.mean(scale_prior.log_prob(stds[var]).as_nd_ndarray())
+            log_prior=log_prior-nd.mean(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(location_prior.log_prob(means[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(param_prior.log_prob(theta).as_nd_ndarray())
         return log_prior
         
 class lenet(softmax):
@@ -190,22 +184,18 @@ class hierarchical_lenet(lenet):
 
     def loss(self,par,means,epsilons,stds,**args):
         log_like=self.negative_log_likelihood(par,**args)
-        log_prior=self.negative_log_prior(par,means,epsilons,stds,**args)
+        log_prior=self.negative_log_prior(means,epsilons,stds,**args)
         return log_like+log_prior
 
-    def negative_log_prior(self, par,means,epsilons,stds,**args):
+    def negative_log_prior(self, means,epsilons,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
         scale_prior=mxp.HalfNormal(scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
-        for var in par.keys():
-            #mu=nd.zeros(par[var].shape,ctx=self.ctx)
-            param_prior=mxp.normal.Normal(loc=means[var],scale=stds[var])
-            theta=nd.array(par[var]).as_in_context(self.ctx)
+        for var in means.keys():
             log_prior=log_prior-nd.mean(scale_prior.log_prob(stds[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(location_prior.log_prob(means[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(param_prior.log_prob(theta).as_nd_ndarray())
         return log_prior
 
 class vgg_softmax(softmax):
