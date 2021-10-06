@@ -109,7 +109,7 @@ class sgld(base):
             for j in range(num_samples):
                 par=dict()
                 for var in posterior_samples.keys():
-                    par.update({var:posterior_samples[var][i,j,:]})
+                    par.update({var:nd.array(posterior_samples[var][i,j,:],ctx=self.ctx)})
                 samples=list()
                 loglike=list()
                 labels=list()
