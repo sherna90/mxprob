@@ -61,7 +61,10 @@ class sgld(base):
     def step(self,n_data,batch_size,momentum,epsilon,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
-            grad = par[var].grad.as_nd_ndarray()
+            if isinstance(par[var].grad,mx.numpy.ndarray):
+                grad = nd.array(par[var].grad,ctx=self.ctx)
+            else:
+                grad = par[var]
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
         return momentum, par
@@ -163,15 +166,16 @@ class hierarchical_sgld(sgld):
         scale_prior=mxp.HalfNormal(scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
         stds={var:scale_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
-        #epsilons={var:eps_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
+        epsilons={var:eps_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
         for var in self.model.par.keys():
             means[var].attach_grad()
             stds[var].attach_grad()
-            #epsilons[var].attach_grad()
+            epsilons[var].attach_grad()
         j=0
         mean_momentum={var:means[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
             dtype=means[var].dtype) for var in means.keys()}
         std_momentum={var:nd.zeros_like(stds[var].as_nd_ndarray(),ctx=self.ctx) for var in stds.keys()}
+        eps_momentum={var:nd.zeros_like(epsilons[var].as_nd_ndarray(),ctx=self.ctx) for var in stds.keys()}
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -180,7 +184,7 @@ class hierarchical_sgld(sgld):
                 y_batch=y_batch.as_in_context(self.ctx)
                 par={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
                 sigmas={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
-                epsilons={var:eps_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
+                #epsilons={var:eps_prior.sample(means[var].shape).copyto(self.ctx).as_nd_ndarray() for var in means.keys()}
                 with autograd.record():
                     for var in means.keys():
                         sigmas[var]=self.softplus(stds[var])
@@ -190,7 +194,7 @@ class hierarchical_sgld(sgld):
                 lr_decay=self.step_size*((30 + j) ** (-0.55))
                 mean_momentum,means=self.step(n_examples,batch_size,mean_momentum,lr_decay,means)
                 std_momentum, stds = self.step(n_examples,batch_size,std_momentum,lr_decay, stds)
-                #mean_momentum, epsilons = self.step(n_examples,batch_size,mean_momentum,lr_decay, epsilons)
+                eps_momentum, epsilons = self.step(n_examples,batch_size,eps_momentum,lr_decay, epsilons)
                 cumulative_loss += nd.mean(loss).asscalar()
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
