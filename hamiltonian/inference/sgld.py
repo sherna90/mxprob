@@ -61,7 +61,10 @@ class sgld(base):
     def step(self,n_data,batch_size,momentum,epsilon,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
-            grad = par[var].grad.as_nd_ndarray()
+            if isinstance(par[var].grad,mx.numpy.ndarray):
+                grad = nd.array(par[var].grad,ctx=self.ctx)
+            else:
+                grad = par[var]
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
             par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)+normal[var].as_nd_ndarray()
         return momentum, par
@@ -172,7 +175,7 @@ class hierarchical_sgld(sgld):
         mean_momentum={var:means[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
             dtype=means[var].dtype) for var in means.keys()}
         std_momentum={var:nd.zeros_like(stds[var].as_nd_ndarray(),ctx=self.ctx) for var in stds.keys()}
-        eps_momentum={var:nd.zeros_like(stds[var].as_nd_ndarray(),ctx=self.ctx) for var in stds.keys()}
+        eps_momentum={var:nd.zeros_like(epsilons[var].as_nd_ndarray(),ctx=self.ctx) for var in stds.keys()}
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
