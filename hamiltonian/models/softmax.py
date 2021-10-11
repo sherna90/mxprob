@@ -199,7 +199,7 @@ class hierarchical_lenet(lenet):
             log_prior=log_prior-nd.mean(scale_prior.log_prob(stds[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
             log_prior=log_prior-nd.mean(location_prior.log_prob(means[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
+            #log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
         return log_prior
 
 class vgg_softmax(softmax):
