@@ -6,6 +6,8 @@ from copy import deepcopy
 from hamiltonian.inference.base import base
 from hamiltonian.inference.sgd import sgd
 import mxnet.gluon.probability as mxp
+import os
+import h5py 
 
 class bbb(base):
 
@@ -17,6 +19,18 @@ class bbb(base):
             verbose=args['verbose']
         else:
             verbose=None
+        if 'chain_name' in args:
+            if os.path.exists(args['chain_name']):
+                os.remove(args['chain_name'])
+            variational_posterior=h5py.File(args['chain_name'],'w')
+        else:
+            if os.path.exists('variational_posterior.h5'):
+                os.remove('variational_posterior.h5')
+            variational_posterior=h5py.File('variational_posterior.h5','w')
+        posterior_means=variational_posterior.create_group('means')
+        posterior_stds=variational_posterior.create_group('stds')
+        dset=[posterior_means.create_dataset(var,shape=self.start[var].shape,dtype=self.start[var].dtype) for var in self.start.keys()]
+        dset=[posterior_stds.create_dataset(var,shape=self.start[var].shape,dtype=self.start[var].dtype) for var in self.start.keys()]
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         means=deepcopy(self.start)
@@ -47,11 +61,18 @@ class bbb(base):
                 means_momentum, means = self.step(batch_size,means_momentum, means)
                 std_momentum, stds = self.step(batch_size,std_momentum, stds)
                 j = j+1 
-                cumulative_loss += nd.sum(loss).asscalar()
+                cumulative_loss += nd.mean(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples
             #w_0 -= loss_val[i]
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
+        if variational_posterior:
+            for var in par.keys():
+                posterior_means[var][:]=means[var].asnumpy()
+                posterior_stds[var][:]=stds[var].asnumpy()
+        variational_posterior.attrs['loss']=loss_val
+        variational_posterior.flush()
+        variational_posterior.close()
         return par,loss_val,(means,stds)
 
     #loss: Bayesian inference
@@ -107,8 +128,7 @@ class bbb(base):
                 labels.append(y_test.asnumpy())
             total_samples.append(np.concatenate(samples))
             total_loglike.append(np.concatenate(loglike))
-            total_labels.append(np.concatenate(labels))
-        #total_samples=np.stack(total_samples)
-        #total_loglike=np.stack(total_loglike)
-        #total_labels=np.stack(total_labels)
+        total_labels=np.concatenate(labels)
+        total_samples=np.stack(total_samples)
+        total_loglike=np.stack(total_loglike)
         return total_samples,total_labels,total_loglike

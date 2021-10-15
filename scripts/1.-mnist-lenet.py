@@ -65,16 +65,6 @@ num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,chain_name='lenet_map.h5',verbose=True)
-
-    plt.rcParams['figure.dpi'] = 360
-    fig=plt.figure(figsize=[5,5])
-    plt.plot(loss,color='blue',lw=3)
-    plt.xlabel('Epoch', size=18)
-    plt.ylabel('Loss', size=18)
-    plt.title('SGD lenet MNIST', size=18)
-    plt.xticks(size=14)
-    plt.yticks(size=14)
-    plt.savefig('sgd_lenet.pdf', bbox_inches='tight')
 else:
     map_estimate=h5py.File('lenet_map.h5','r')
     par={var:nd.array(map_estimate[var][:]) for var in map_estimate.keys()}
@@ -89,26 +79,13 @@ print('Stochastic Gradient Langevin Dynamics')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgld(model,par,step_size=0.01,ctx=model_ctx)
 
-train_sgld=True
-num_epochs=100
+train_sgld=False
+num_epochs=10
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
                                 verbose=True,chain_name='lenet_posterior.h5')
-
-    plt.rcParams['figure.dpi'] = 360
-    sns.set_style("whitegrid")
-    fig=plt.figure(figsize=[5,5])
-    plt.plot(loss[0],color='blue',lw=3)
-    plt.plot(loss[1],color='red',lw=3)
-    plt.xlabel('Epoch', size=18)
-    plt.ylabel('Loss', size=18)
-    plt.title('SGLD lenet MNIST', size=18)
-    plt.xticks(size=14)
-    plt.yticks(size=14)
-    plt.savefig('sgld_lenet.pdf', bbox_inches='tight')
-
 
 posterior_samples=h5py.File('lenet_posterior.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
@@ -155,8 +132,8 @@ plt.title('ESS')
 plt.savefig('ess_nonhierarchical_lenet.pdf', bbox_inches='tight')
 
 loo,loos,ks=psisloo(log_like)
-max_ks=max(ks[~ np.isinf(ks)])
-ks[np.isinf(ks)]=max_ks
+#max_ks=max(ks[~ np.isinf(ks)])
+#ks[np.isinf(ks)]=max_ks
 flat_ks_1=np.sum(ks>1)
 flat_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
 flat_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))
@@ -168,28 +145,17 @@ print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
 
 
-model=hierarchical_lenet(hyper,in_units,out_units,ctx=model_ctx)
+model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=hierarchical_sgld(model,par,step_size=0.001,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=100
+num_epochs=10
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
                                 verbose=True,chain_name='hierarchical_lenet_posterior.h5')
 
-    plt.rcParams['figure.dpi'] = 360
-    sns.set_style("whitegrid")
-    fig=plt.figure(figsize=[5,5])
-    plt.plot(loss[0],color='blue',lw=3)
-    plt.plot(loss[1],color='red',lw=3)
-    plt.xlabel('Epoch', size=18)
-    plt.ylabel('Loss', size=18)
-    plt.title('SGLD Hierarchical lenet MNIST', size=18)
-    plt.xticks(size=14)
-    plt.yticks(size=14)
-    plt.savefig('sgld_hierarchical_lenet.pdf', bbox_inches='tight')
 
 
 posterior_samples=h5py.File('hierarchical_lenet_posterior.h5','r')
@@ -240,8 +206,8 @@ plt.savefig('ess_hierarchical_lenet.pdf', bbox_inches='tight')
 
 
 loo,loos,ks=psisloo(log_like)
-max_ks=max(ks[~ np.isinf(ks)])
-ks[np.isinf(ks)]=max_ks
+#max_ks=max(ks[~ np.isinf(ks)])
+#ks[np.isinf(ks)]=max_ks
 hierarchical_ks_1=np.sum(ks>1)
 hierarchical_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
 hierarchical_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))

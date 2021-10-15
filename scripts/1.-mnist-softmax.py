@@ -38,8 +38,8 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.gpu()
-num_workers = 2
+model_ctx = mx.cpu()
+num_workers = 0
 batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -66,15 +66,6 @@ if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,chain_name='mnist_map.h5',verbose=True)
 
-    plt.rcParams['figure.dpi'] = 360
-    fig=plt.figure(figsize=[5,5])
-    plt.plot(loss,color='blue',lw=3)
-    plt.xlabel('Epoch', size=18)
-    plt.ylabel('Loss', size=18)
-    plt.title('SGD Softmax MNIST', size=18)
-    plt.xticks(size=14)
-    plt.yticks(size=14)
-    plt.savefig('sgd_softmax.pdf', bbox_inches='tight')
 else:
     map_estimate=h5py.File('mnist_map.h5','r')
     par={var:map_estimate[var][:] for var in map_estimate.keys()}
@@ -97,17 +88,6 @@ if train_sgld:
                                 data_loader=train_data,
                                 verbose=True,chain_name='mnist_nonhierarchical.h5')
 
-    plt.rcParams['figure.dpi'] = 360
-    sns.set_style("whitegrid")
-    fig=plt.figure(figsize=[5,5])
-    plt.plot(loss[0],color='blue',lw=3)
-    plt.plot(loss[1],color='red',lw=3)
-    plt.xlabel('Epoch', size=18)
-    plt.ylabel('Loss', size=18)
-    plt.title('SGLD Softmax MNIST', size=18)
-    plt.xticks(size=14)
-    plt.yticks(size=14)
-    plt.savefig('sgld_softmax.pdf', bbox_inches='tight')
 
 
 posterior_samples=h5py.File('mnist_nonhierarchical.h5','r')
@@ -168,7 +148,7 @@ print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
 
 
-hierarchical_model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
+hierarchical_model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=hierarchical_sgld(hierarchical_model,par,step_size=0.001,ctx=model_ctx)
 
 train_sgld=True
@@ -178,18 +158,6 @@ if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
                                 verbose=True,chain_name='mnist_hierarchical.h5')
-
-    plt.rcParams['figure.dpi'] = 360
-    sns.set_style("whitegrid")
-    fig=plt.figure(figsize=[5,5])
-    plt.plot(loss[0],color='blue',lw=3)
-    plt.plot(loss[1],color='red',lw=3)
-    plt.xlabel('Epoch', size=18)
-    plt.ylabel('Loss', size=18)
-    plt.title('SGLD Hierarchical Softmax MNIST', size=18)
-    plt.xticks(size=14)
-    plt.yticks(size=14)
-    plt.savefig('sgld_hierarchical_softmax.pdf', bbox_inches='tight')
 
 
 posterior_samples=h5py.File('mnist_hierarchical.h5','r')
@@ -240,8 +208,6 @@ plt.savefig('ess_hierarchical_softmax.pdf', bbox_inches='tight')
 
 
 loo,loos,ks=psisloo(log_like)
-max_ks=max(ks[~ np.isinf(ks)])
-ks[np.isinf(ks)]=max_ks
 hierarchical_ks_1=np.sum(ks>1)
 hierarchical_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
 hierarchical_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))
