@@ -142,7 +142,8 @@ class sgld(base):
 class hierarchical_sgld(sgld):
     
     def softplus(self,x):
-        return nd.log(1. + nd.exp(x))
+        #return nd.log(1. + nd.exp(x))
+        return nd.exp(x)
 
     def fit(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:
@@ -160,7 +161,7 @@ class hierarchical_sgld(sgld):
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         means=deepcopy(self.start)
-        scale_prior=mxp.HalfNormal(scale=1.0)
+        scale_prior=mxp.Normal(loc=0.,scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
         mean_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
         std_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}

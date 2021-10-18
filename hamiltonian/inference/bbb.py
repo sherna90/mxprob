@@ -36,7 +36,7 @@ class bbb(base):
         means=deepcopy(self.start)
         means_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
         std_momentum={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
-        stds={var:nd.random.normal(shape=means[var].shape,ctx=self.ctx) for var in means.keys()}
+        stds={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
         for var in means.keys():
             means[var].attach_grad()
             stds[var].attach_grad()
@@ -53,27 +53,27 @@ class bbb(base):
                     epsilons={var:nd.random.normal(shape=means[var].as_nd_ndarray().shape, loc=0., scale=1.0,ctx=self.ctx) for var in means.keys()}
                     for var in means.keys():
                         sigmas[var][:]=self.softplus(stds[var])
-                        par[var][:]=means[var].as_nd_ndarray() + (stds[var] * epsilons[var])
-                    loss = self.model.loss(par,X_train=X_batch,y_train=y_batch) 
-                    #loss = self.loss(par,means,sigmas,n_examples,batch_size,X_train=X_batch,y_train=y_batch)
+                        par[var][:]=means[var].as_nd_ndarray() + (sigmas[var] * epsilons[var])
+                    #loss = self.model.loss(par,X_train=X_batch,y_train=y_batch) 
+                    loss = self.model.loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus meansametros. por retropropagacion
                 #loss es el gradiente
                 means_momentum, means = self.step(batch_size,means_momentum, means)
-                std_momentum, stds = self.step(batch_size,std_momentum, stds)
+                means_momentum, stds = self.step(batch_size,means_momentum, stds)
                 j = j+1 
                 cumulative_loss += nd.mean(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples
             #w_0 -= loss_val[i]
-            if verbose and (i%(epochs/10)==0):
+            if verbose and (i%(epochs/epochs)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         if variational_posterior:
             for var in par.keys():
                 posterior_means[var][:]=means[var].asnumpy()
-                posterior_stds[var][:]=stds[var].asnumpy()
+                posterior_stds[var][:]=sigmas[var].asnumpy()
         variational_posterior.attrs['loss']=loss_val
         variational_posterior.flush()
         variational_posterior.close()
-        return par,loss_val,(means,stds)
+        return par,loss_val,(means,sigmas)
 
     #loss: Bayesian inference
     def loss(self,par,means,sigmas,n_data,batch_size,**args):
@@ -107,7 +107,7 @@ class bbb(base):
         posterior=dict()
         for var in means.keys():
             variational_posterior=mxp.normal.Normal(loc=means[var],
-                                            scale=self.softplus(sigmas[var]))
+                                            scale=sigmas[var])
             posterior.update({var:variational_posterior})
         for i in range(num_samples):
             samples=[]

@@ -60,7 +60,7 @@ class softmax():
             sigmas=nd.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
             theta=nd.array(par[var]).as_in_context(self.ctx)
-            log_prior=log_prior-nd.mean(param_prior.log_prob(theta).as_nd_ndarray())
+            log_prior=log_prior-nd.sum(param_prior.log_prob(theta).as_nd_ndarray())
         return log_prior
     
     def negative_log_likelihood(self,par,**args):
@@ -87,15 +87,14 @@ class hierarchical_softmax(softmax):
 
     def negative_log_prior(self,par, means,epsilons,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
-        scale_prior=mxp.HalfNormal(scale=1.0)
+        scale_prior=mxp.Normal(loc=0.0,scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
         for var in means.keys():
-            param_prior=mxp.Normal(loc=means[var],scale=stds[var])
-            log_prior=log_prior-nd.mean(scale_prior.log_prob(stds[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(location_prior.log_prob(means[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
+            log_sigmas=nd.log(stds[var].as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(scale_prior.log_prob(log_sigmas).as_nd_ndarray())+nd.nansum(log_sigmas)
+            log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
         return log_prior
 
 class mlp_softmax(softmax):
@@ -187,20 +186,20 @@ class hierarchical_lenet(lenet):
     def loss(self,par,means,epsilons,stds,**args):
         log_like=self.negative_log_likelihood(par,**args)
         log_prior=self.negative_log_prior(par,means,epsilons,stds,**args)
-        return log_like+log_prior
+        return log_like
 
     def negative_log_prior(self,par, means,epsilons,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
-        scale_prior=mxp.HalfNormal(scale=1.0)
+        scale_prior=mxp.Normal(loc=0.0,scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
         for var in means.keys():
-            param_prior=mx.Normal(loc=means[var],scale=stds[var])
-            log_prior=log_prior-nd.mean(scale_prior.log_prob(stds[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.mean(location_prior.log_prob(means[var]).as_nd_ndarray())
-            #log_prior=log_prior-nd.mean(param_prior.log_prob(par[var]).as_nd_ndarray())
+            log_sigmas=nd.log(stds[var].as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(scale_prior.log_prob(stds[var]).as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
         return log_prior
+
 
 class vgg_softmax(softmax):
     
@@ -227,7 +226,7 @@ class vgg_softmax(softmax):
             net(data.as_in_context(self.ctx))
             par=self.reset(net[1])
         else:
-            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ct5x)
+            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
             data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
             net(data.as_in_context(self.ctx))
             par=self.reset(net)

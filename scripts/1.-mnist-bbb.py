@@ -22,7 +22,7 @@ import seaborn as sns
 
 import mxnet as mx
 from hamiltonian.inference.sgd import sgd
-from hamiltonian.models.softmax import softmax
+from hamiltonian.models.softmax import softmax,hierarchical_softmax
 from hamiltonian.inference.sgld import sgld
 from hamiltonian.utils.psis import *
 from hamiltonian.inference.bbb import bbb
@@ -71,11 +71,11 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 print('#######################################')
 print('Bayes By Backprop')
-model=softmax(hyper,in_units,out_units,ctx=model_ctx)
+model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=bbb(model,model.par,step_size=0.005,ctx=model_ctx)
 
-train_bbb=False
-num_epochs=100
+train_bbb=True
+num_epochs=10
 
 if train_bbb:
     par,loss,(means,sigmas)=inference.fit(epochs=num_epochs,batch_size=batch_size,data_loader=train_data,verbose=True)
@@ -84,6 +84,6 @@ else:
     means={var:nd.array(par['means'][var][:],ctx=model_ctx) for var in par['means'].keys()}
     sigmas={var:nd.array(par['stds'][var][:],ctx=model_ctx) for var in par['stds'].keys()}
 
-total_samples,total_labels,log_like=inference.predict(means,sigmas,batch_size=batch_size,num_samples=100,data_loader=val_data)
+total_samples,total_labels,log_like=inference.predict(means,sigmas,batch_size=batch_size,num_samples=10,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))

@@ -145,7 +145,7 @@ print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
 
 
-model=lenet(hyper,in_units,out_units,ctx=model_ctx)
+model=hierarchical_lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=hierarchical_sgld(model,par,step_size=0.001,ctx=model_ctx)
 
 train_sgld=True
