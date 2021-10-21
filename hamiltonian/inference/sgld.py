@@ -58,7 +58,7 @@ class sgld(base):
         #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
         return par,loss_val
     
-    def step(self,epsilon,batch_size,momentum,par):
+    def step(self,epsilon,momentum,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             grad=par[var].grad.as_nd_ndarray()
@@ -162,7 +162,7 @@ class hierarchical_sgld(sgld):
         loss_val=np.zeros(epochs)
         par=deepcopy(self.start)
         scale_prior=mxp.Normal(loc=0.,scale=1.0)
-        means_prior=mxp.Normal(loc=0.,scale=1.0
+        means_prior=mxp.Normal(loc=0.,scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
         mean_momentum={var:nd.zeros_like(par[var].as_nd_ndarray(),ctx=self.ctx) for var in par.keys()}
         std_momentum={var:nd.zeros_like(par[var].as_nd_ndarray(),ctx=self.ctx) for var in par.keys()}
@@ -185,12 +185,12 @@ class hierarchical_sgld(sgld):
                     epsilons={var:eps_prior.sample(par[var].shape).copyto(self.ctx).as_nd_ndarray() for var in par.keys()}
                     for var in means.keys():
                         sigmas[var][:]=self.softplus(stds[var])
-                    loss=self.centered_hierarchical_loss(par,means,epsilons,sigmas,X_train=X,y_train=y)
+                    loss=self.centered_hierarchical_loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()
                 lr_decay=self.step_size*((30 + j) ** (-0.55))
-                mean_momentum, means = self.step(lr_decay,batch_size,mean_momentum, means)
-                std_momentum, stds = self.step(lr_decay,batch_size,std_momentum, stds)
-                eps_momentum, par = self.step(lr_decay,batch_size,eps_momentum, par)
+                mean_momentum, means = self.step(lr_decay,mean_momentum, means)
+                std_momentum, stds = self.step(lr_decay,std_momentum, stds)
+                eps_momentum, par = self.step(lr_decay,eps_momentum, par)
                 j = j+1 
                 cumulative_loss += nd.mean(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples

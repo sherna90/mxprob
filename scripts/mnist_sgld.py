@@ -39,7 +39,7 @@ transform = transforms.Compose([
 num_gpus = 0
 model_ctx = mx.gpu()
 num_workers = 2
-batch_size = 32 
+batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
     batch_size=batch_size, shuffle=True, last_batch='discard', num_workers=num_workers)
@@ -53,7 +53,7 @@ hyper={'alpha':10.}
 in_units=(1,28,28)
 out_units=10
 
-model=resnet_softmax(hyper,in_units,out_units,n_layers=18,ctx=model_ctx)
+model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 
 par=model.par
 inference=hierarchical_sgld(model,model.par,step_size=1e-1,ctx=model_ctx)
@@ -82,7 +82,7 @@ def SGLD(params, lr):
 learning_rate=1e-3
 iter=0
 n_data=len(train_data)
-for _ in range(10):
+for _ in range(100):
     for X,y in train_data:
         X=X.as_in_context(model_ctx)
         y=y.as_in_context(model_ctx)
