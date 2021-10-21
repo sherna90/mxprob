@@ -2,6 +2,8 @@
 # coding: utf-8
 
 import sys
+
+from numpy.core.fromnumeric import _mean_dispatcher
 sys.path.append("../") 
 
 
@@ -14,14 +16,17 @@ from mxnet.gluon import nn
 from mxnet.gluon.data.vision import transforms
 
 from sklearn.metrics import classification_report
+from sklearn.metrics import accuracy_score
+
 import h5py 
 
 import mxnet as mx
 from hamiltonian.inference.sgd import sgd
-from hamiltonian.models.softmax import softmax
+from hamiltonian.models.softmax import softmax,lenet,hierarchical_lenet
 from hamiltonian.inference.sgld import sgld
-from hamiltonian.models.softmax import hierarchical_softmax
+from hamiltonian.models.softmax import hierarchical_softmax,hierarchical_resnet
 from hamiltonian.inference.sgld import hierarchical_sgld
+from hamiltonian.inference.bbb import bbb
 from hamiltonian.utils.psis import *
 import mxnet.gluon.probability as mxp
 from mxnet import nd, autograd
@@ -33,8 +38,8 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.cpu()
-num_workers = 0
+model_ctx = mx.gpu()
+num_workers = 2
 batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -46,27 +51,55 @@ val_data = gluon.data.DataLoader(
 
 
 hyper={'alpha':10.}
-in_units=(28,28)
+in_units=(1,28,28)
 out_units=10
 
+model=hierarchical_resnet(hyper,in_units,out_units,n_layers=18,ctx=model_ctx)
 
-map_estimate=h5py.File('mnist_map.h5','r')
-par={var:map_estimate[var][:] for var in map_estimate.keys()}
-map_estimate.close()
+par=model.par
+inference=bbb(model,model.par,step_size=1e-1,ctx=model_ctx)
+scale_prior=mxp.HalfNormal(scale=1.)
+stds={var:scale_prior.sample(par[var].shape).copyto(model_ctx) for var in par.keys()}
+loc_prior=mxp.Normal(loc=0,scale=1.)
+means={var:loc_prior.sample(par[var].shape).copyto(model_ctx) for var in par.keys()}
+inference_sgd=sgd(model,par,step_size=0.1,ctx=model_ctx)
 
-hierarchical_model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=hierarchical_sgld(hierarchical_model,par,step_size=0.001,ctx=model_ctx)
 
-prior=mxp.HalfNormal(scale=1.0)
-stds={var:prior.sample(par[var].shape).copyto(model_ctx) for var in par.keys()}
 for var in par.keys():
-    par[var]=nd.array(par[var])
-    par[var].attach_grad()
+    means[var].attach_grad()
     stds[var].attach_grad()
 
-for X,y in train_data:
-    break
+def SGD(params,batch_size, lr):
+    for var,param in params.items():
+        param[:] = param - lr * param.grad/(1.*batch_size)
 
-with autograd.record():     
-    loss = inference.loss(par,stds,X_train=X,y_train=y)
-loss.backward()
+learning_rate=1e-3
+iter=0
+n_data=len(train_data)
+for _ in range(10):
+    for X,y in train_data:
+        X=X.as_in_context(model_ctx)
+        y=y.as_in_context(model_ctx)
+        sigmas=dict()
+        par=dict()
+        epsilons={var:loc_prior.sample(means[var].shape).copyto(model_ctx) for var in means.keys()}
+        for var in means.keys():
+            sigmas.update({var:inference.softplus(stds[var].as_nd_ndarray())})
+            par.update({var:means[var].as_nd_ndarray() + (sigmas[var].as_nd_ndarray() * epsilons[var].as_nd_ndarray())})
+        with autograd.record():     
+            loss = inference.loss(par,means,epsilons,sigmas,n_data,batch_size,X_train=X,y_train=y)
+        loss.backward()
+        #SGD(par,batch_size, learning_rate)
+        SGD(means,batch_size, learning_rate)
+        SGD(stds,batch_size, learning_rate)
+        curr_loss = nd.mean(loss).asscalar()
+        #print('iter {0}, loss : {1}'.format(iter,curr_loss))
+        iter+=1
+        if (iter%100 == 0):
+            for var in means.keys():
+                means.update({var:means[var].as_nd_ndarray()})
+            #total_samples,total_labels,log_like=inference.predict(means,sigmas,batch_size=batch_size,num_samples=10,data_loader=val_data)
+            total_samples,total_labels,log_like=inference_sgd.predict(means,batch_size=batch_size,num_samples=100,data_loader=val_data)
+            y_hat=np.quantile(total_samples,.5,axis=0)
+            acc=accuracy_score(np.int32(total_labels),np.int32(y_hat)) 
+            print('iter {0}, accuracy : {1:0.2f}, loss {2:0.2f}'.format(iter,acc,curr_loss))

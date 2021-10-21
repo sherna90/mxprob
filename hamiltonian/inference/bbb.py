@@ -76,7 +76,7 @@ class bbb(base):
         return par,loss_val,(means,sigmas)
 
     #loss: Bayesian inference
-    def loss(self,par,means,sigmas,n_data,batch_size,**args):
+    def loss(self,par,means,epsilons,sigmas,n_data,batch_size,**args):
         for k,v in args.items():
             if k=='X_train':
                 X_train=v
@@ -85,15 +85,16 @@ class bbb(base):
         num_batches=n_data/batch_size
         for var in self.model.par.keys():
             if type(self.model.par[var])=='mxnet.numpy.ndarray':
-                par.update({var:par[var].as_np_ndarray()})
+                par.update({var:par[var].as_nd_ndarray()})
         log_likelihood_sum=self.model.negative_log_likelihood(par,X_train=X_train,y_train=y_train)
-        log_prior_sum=self.model.negative_log_prior(par,X_train=X_train,y_train=y_train)
-        log_var_posterior=list()
+        log_prior_sum=self.model.negative_log_prior(par,means,epsilons,sigmas,X_train=X_train,y_train=y_train)
+        log_var_posterior=nd.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
-            variational_posterior=mxp.normal.Normal(loc=means[var],scale=self.softplus(sigmas[var]))
-            log_var_posterior.append(nd.mean(variational_posterior.log_prob(par[var]).as_nd_ndarray()))
-        log_var_posterior_sum=sum(log_var_posterior)
-        return 1.0 / num_batches * (log_var_posterior_sum + log_prior_sum) + log_likelihood_sum
+            l_kl=1.+nd.log(nd.square(sigmas[var].as_nd_ndarray()))
+            l_kl=l_kl-nd.square(means[var].as_nd_ndarray())
+            l_kl=l_kl-nd.square(sigmas[var].as_nd_ndarray())
+            log_var_posterior=log_var_posterior-0.5*nd.sum(l_kl)
+        return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
     
     def step(self,batch_size,momentum,par):
         momentum, par = sgd.step(self, batch_size,momentum,par)
@@ -116,6 +117,7 @@ class bbb(base):
             par=dict()
             for var in means.keys():
                 par.update({var:posterior[var].sample().as_nd_ndarray()})
+                #par.update({var:means[var].as_nd_ndarray()})
             for X_test,y_test in data_loader:
                 X_test=X_test.as_in_context(self.ctx)
                 y_test=y_test.as_in_context(self.ctx)
