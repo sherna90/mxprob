@@ -55,7 +55,7 @@ class bbb(base):
                         sigmas[var][:]=self.softplus(stds[var])
                         par[var][:]=means[var].as_nd_ndarray() + (sigmas[var] * epsilons[var])
                     #loss = self.model.loss(par,X_train=X_batch,y_train=y_batch) 
-                    loss = self.model.loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
+                    loss = self.variational_loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus meansametros. por retropropagacion
                 #loss es el gradiente
                 means_momentum, means = self.step(batch_size,means_momentum, means)
@@ -76,26 +76,6 @@ class bbb(base):
         return par,loss_val,(means,sigmas)
 
     #loss: Bayesian inference
-    def loss(self,par,means,epsilons,sigmas,n_data,batch_size,**args):
-        for k,v in args.items():
-            if k=='X_train':
-                X_train=v
-            elif k=='y_train':
-                y_train=v
-        num_batches=n_data/batch_size
-        for var in self.model.par.keys():
-            if type(self.model.par[var])=='mxnet.numpy.ndarray':
-                par.update({var:par[var].as_nd_ndarray()})
-        log_likelihood_sum=self.model.negative_log_likelihood(par,X_train=X_train,y_train=y_train)
-        log_prior_sum=self.model.negative_log_prior(par,means,epsilons,sigmas,X_train=X_train,y_train=y_train)
-        log_var_posterior=nd.zeros(shape=1,ctx=self.ctx)
-        for var in par.keys():
-            l_kl=1.+nd.log(nd.square(sigmas[var].as_nd_ndarray()))
-            l_kl=l_kl-nd.square(means[var].as_nd_ndarray())
-            l_kl=l_kl-nd.square(sigmas[var].as_nd_ndarray())
-            log_var_posterior=log_var_posterior-0.5*nd.sum(l_kl)
-        return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
-    
     def step(self,batch_size,momentum,par):
         momentum, par = sgd.step(self, batch_size,momentum,par)
         return momentum, par

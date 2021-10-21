@@ -77,15 +77,7 @@ class softmax():
         log_prior=self.negative_log_prior(par,**args)
         return log_like+log_prior
 
-
-class hierarchical_softmax(softmax):
-
-    def loss(self,par,means,epsilons,stds,**args):
-        log_like=self.negative_log_likelihood(par,**args)
-        log_prior=self.negative_log_prior(par,means,epsilons,stds,**args)
-        return log_like+log_prior
-
-    def negative_log_prior(self,par, means,epsilons,stds,**args):
+    def negative_log_prior_non_centered(self,par, means,epsilons,stds,**args):
         log_prior=nd.zeros(shape=1,ctx=self.ctx)
         scale_prior=mxp.Normal(loc=0.0,scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
@@ -96,6 +88,19 @@ class hierarchical_softmax(softmax):
             log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
             log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
         return log_prior
+
+    def negative_log_prior_centered(self,par, means,epsilons,stds,**args):
+        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        scale_prior=mxp.Normal(loc=0.0,scale=1.0)
+        location_prior=mxp.Normal(loc=0.0,scale=1.0)
+        for var in means.keys():
+            theta_prior=mxp.Normal(loc=means[var],scale=stds[var])
+            log_sigmas=nd.log(stds[var].as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(scale_prior.log_prob(log_sigmas).as_nd_ndarray())+nd.nansum(log_sigmas)
+            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(theta_prior.log_prob(par[var]).as_nd_ndarray())
+        return log_prior
+
 
 class mlp_softmax(softmax):
     
@@ -134,25 +139,8 @@ class resnet_softmax(softmax):
         par=self.reset(net)
         return net,par
 
-class hierarchical_resnet(resnet_softmax):
 
-    def loss(self,par,means,epsilons,stds,**args):
-        log_like=self.negative_log_likelihood(par,**args)
-        log_prior=self.negative_log_prior(par,means,epsilons,stds,**args)
-        return log_like+log_prior
 
-    def negative_log_prior(self,par, means,epsilons,stds,**args):
-        log_prior=nd.zeros(shape=1,ctx=self.ctx)
-        scale_prior=mxp.Normal(loc=0.0,scale=1.0)
-        location_prior=mxp.Normal(loc=0.0,scale=1.0)
-        epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
-        for var in means.keys():
-            log_sigmas=nd.log(stds[var].as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(scale_prior.log_prob(log_sigmas).as_nd_ndarray())+nd.nansum(log_sigmas)
-            log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
-        return log_prior
-        
 class lenet(softmax):
     
     def __init__(self,_hyper,in_units=(1,28,28),out_units=10,ctx=mx.cpu()):
@@ -176,25 +164,6 @@ class lenet(softmax):
         par=self.reset(net)
         return net,par
     
-class hierarchical_lenet(lenet):
-
-    def loss(self,par,means,epsilons,stds,**args):
-        log_like=self.negative_log_likelihood(par,**args)
-        log_prior=self.negative_log_prior(par,means,epsilons,stds,**args)
-        return log_like+log_prior
-
-    def negative_log_prior(self,par, means,epsilons,stds,**args):
-        log_prior=nd.zeros(shape=1,ctx=self.ctx)
-        scale_prior=mxp.Normal(loc=0.0,scale=1.0)
-        location_prior=mxp.Normal(loc=0.0,scale=1.0)
-        epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
-        for var in means.keys():
-            log_sigmas=nd.log(stds[var].as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(scale_prior.log_prob(log_sigmas).as_nd_ndarray())+nd.nansum(log_sigmas)
-            log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
-        return log_prior
-
 
 class vgg_softmax(softmax):
     

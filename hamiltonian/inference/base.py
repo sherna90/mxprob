@@ -47,8 +47,35 @@ class base:
 
     def loss(self,par,X_train,y_train):
         batch_size=X_train.shape[0]
-        return self.model.loss(par,X_train=X_train,y_train=y_train)*1/batch_size
+        return self.model.loss(par,X_train=X_train,y_train=y_train)*1./batch_size
     
-    def hierarchical_loss(self,par,means,epsilons,stds,X_train,y_train):
-        batch_size=X_train.shape[0]
-        return self.model.loss(par,means,epsilons,stds,X_train=X_train,y_train=y_train)*1/batch_size
+    def centered_hierarchical_loss(self,par,means,epsilons,stds,**args):
+        log_like=self.model.negative_log_likelihood(par,**args)
+        log_prior=self.model.negative_log_prior_centered(par,means,epsilons,stds,**args)
+        return log_like+log_prior
+
+    def non_centered_hierarchical_loss(self,par,means,epsilons,stds,**args):
+        log_like=self.model.negative_log_likelihood(par,**args)
+        log_prior=self.model.negative_log_prior_non_centered(par,means,epsilons,stds,**args)
+        return log_like+log_prior
+
+    def variational_loss(self,par,means,epsilons,sigmas,n_data,batch_size,**args):
+        for k,v in args.items():
+            if k=='X_train':
+                X_train=v
+            elif k=='y_train':
+                y_train=v
+        num_batches=n_data/batch_size
+        for var in self.model.par.keys():
+            if type(self.model.par[var])=='mxnet.numpy.ndarray':
+                par.update({var:par[var].as_nd_ndarray()})
+        log_likelihood_sum=self.model.negative_log_likelihood(par,X_train=X_train,y_train=y_train)
+        log_prior_sum=self.model.negative_log_prior_non_centered(par,means,epsilons,sigmas,X_train=X_train,y_train=y_train)
+        log_var_posterior=nd.zeros(shape=1,ctx=self.ctx)
+        for var in par.keys():
+            l_kl=1.+nd.log(nd.square(sigmas[var].as_nd_ndarray()))
+            l_kl=l_kl-nd.square(means[var].as_nd_ndarray())
+            l_kl=l_kl-nd.square(sigmas[var].as_nd_ndarray())
+            log_var_posterior=log_var_posterior-0.5*nd.sum(l_kl)
+        return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
+    
