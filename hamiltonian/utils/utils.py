@@ -36,9 +36,10 @@ def plot_diagnostics(diagnostics,title,file_name):
     fig=plt.figure(figsize=[5,5])
     sns.set_style("whitegrid")    
     plt.boxplot(flatten_data)
-    plt.xticks(range(1, len(labels) + 1), labels)
+    plt.xticks(range(1, len(labels) + 1), labels,rotation=70)
     plt.title(title)
     plt.savefig(file_name, bbox_inches='tight')
+    plt.close()
 
 def plot_loss(loss,title,file_name):
     plt.rcParams['figure.dpi'] = 360
@@ -52,3 +53,4 @@ def plot_loss(loss,title,file_name):
     plt.xticks(size=14)
     plt.yticks(size=14)
     plt.savefig(file_name, bbox_inches='tight')
+    plt.close()
