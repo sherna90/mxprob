@@ -37,8 +37,8 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.cpu()
-num_workers = 0
+model_ctx = mx.gpu()
+num_workers = 2
 batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -50,7 +50,7 @@ val_data = gluon.data.DataLoader(
 
 
 hyper={'alpha':10.}
-in_units=(28,28)
+in_units=(1,28,28)
 out_units=10
 
 
@@ -67,7 +67,7 @@ if train_sgd:
 
 else:
     map_estimate=h5py.File('mnist_map.h5','r')
-    par={var:map_estimate[var][:] for var in map_estimate.keys()}
+    par={var:mx.np.array(map_estimate[var][:],ctx=model_ctx) for var in map_estimate.keys()}
     map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
@@ -123,7 +123,7 @@ print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
 inference=hierarchical_sgld(model,par,step_size=0.001,ctx=model_ctx)
 
-train_sgld=False
+train_sgld=True
 num_epochs=100
 
 if train_sgld:

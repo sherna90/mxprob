@@ -22,7 +22,7 @@ import seaborn as sns
 
 import mxnet as mx
 from hamiltonian.inference.sgd import sgd
-from hamiltonian.models.softmax import softmax,hierarchical_softmax
+from hamiltonian.models.softmax import softmax
 from hamiltonian.inference.sgld import sgld
 from hamiltonian.utils.psis import *
 from hamiltonian.inference.bbb import bbb
@@ -33,8 +33,8 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.cpu()
-num_workers = 0
+model_ctx = mx.gpu()
+num_workers = 2
 batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -55,7 +55,7 @@ print('Stochastic Gradient Descent')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
 
-train_sgd=False
+train_sgd=True
 num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
@@ -71,7 +71,7 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 print('#######################################')
 print('Bayes By Backprop')
-model=hierarchical_softmax(hyper,in_units,out_units,ctx=model_ctx)
+model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=bbb(model,model.par,step_size=0.005,ctx=model_ctx)
 
 train_bbb=True

@@ -19,7 +19,7 @@ class softmax():
     def _init_net(self,in_units,out_units):
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(gluon.nn.Flatten())
-        net.add(gluon.nn.Dense(out_units,in_units=in_units[0]*in_units[1]))#capa de salida
+        net.add(gluon.nn.Dense(out_units,in_units=in_units[1]*in_units[2]))#capa de salida
         par=self.reset(net)
         return net,par
 
@@ -47,9 +47,12 @@ class softmax():
                 #X=nd.array(v,ctx=self.ctx)
         for name,gluon_par in self.net.collect_params().items():
             if name in par.keys():
-                gluon_par.set_data(par[name])
+                if isinstance(gluon_par,mx.np.ndarray):
+                    gluon_par.set_data(par[name].as_np_ndarray())
+                else:
+                    gluon_par.set_data(par[name])
         y_linear = self.net.forward(X)
-        yhat = self.softmax(y_linear)
+        yhat = self.softmax(y_linear.as_nd_ndarray())
         cat=mxp.Categorical(1,prob=yhat)
         return cat
      
@@ -59,8 +62,8 @@ class softmax():
             means=nd.zeros(par[var].shape,ctx=self.ctx)
             sigmas=nd.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
-            theta=nd.array(par[var]).as_in_context(self.ctx)
-            log_prior=log_prior-nd.sum(param_prior.log_prob(theta).as_nd_ndarray())
+            #theta=nd.array(par[var]).as_in_context(self.ctx)
+            log_prior=log_prior-nd.sum(param_prior.log_prob(par[var]).as_nd_ndarray())
         return log_prior
     
     def negative_log_likelihood(self,par,**args):
@@ -83,8 +86,8 @@ class softmax():
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
         for var in means.keys():
-            log_sigmas=nd.log(stds[var].as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(scale_prior.log_prob(log_sigmas).as_nd_ndarray())+nd.nansum(log_sigmas)
+            #log_sigmas=nd.log(stds[var].as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(scale_prior.log_prob(stds[var]).as_nd_ndarray())
             log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
             log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
         return log_prior
@@ -95,8 +98,8 @@ class softmax():
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         for var in means.keys():
             theta_prior=mxp.Normal(loc=means[var],scale=stds[var])
-            log_sigmas=nd.log(stds[var].as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(scale_prior.log_prob(log_sigmas).as_nd_ndarray())+nd.nansum(log_sigmas)
+            #log_sigmas=nd.log(stds[var].as_nd_ndarray())
+            log_prior=log_prior-nd.nansum(scale_prior.log_prob(stds[var]).as_nd_ndarray())
             log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
             log_prior=log_prior-nd.nansum(theta_prior.log_prob(par[var]).as_nd_ndarray())
         return log_prior
@@ -159,7 +162,7 @@ class lenet(softmax):
             gluon.nn.Dense(84, activation='sigmoid'))
         net.add(gluon.nn.Dense(out_units))#capa de salida
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+        data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
         par=self.reset(net)
         return net,par

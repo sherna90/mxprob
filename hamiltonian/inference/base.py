@@ -11,7 +11,7 @@ class base:
         self.step_size = step_size
         self.model = model
         self.ctx=ctx
-        self.start = {var:nd.array(start_p[var],ctx=self.ctx) for var in start_p.keys()}
+        self.start = {var:start_p[var] for var in start_p.keys()}
         self.gamma=0.9
         
     def _get_loader(self,**args):

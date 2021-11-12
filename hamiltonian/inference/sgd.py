@@ -25,8 +25,8 @@ class sgd(base):
             if os.path.exists(args['map_estimate.h5']):
                 os.remove(args['map_estimate.h5'])
             posterior_samples=h5py.File('map_estimate.h5','w')
-        par=self.model.par
-        for var in self.model.par.keys():
+        par=self.start
+        for var in self.start.keys():
             par[var].attach_grad()
         momentum={var:nd.zeros_like(par[var].as_nd_ndarray()) for var in par.keys()}
         for i in tqdm(range(epochs)):
@@ -54,7 +54,7 @@ class sgd(base):
     def step(self,batch_size,momentum,par):
         for var in par.keys():
             #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
-            grad=par[var].grad.as_nd_ndarray()
+            grad=par[var]
             momentum[var][:] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
             par[var][:]=par[var]-momentum[var]
         return momentum, par

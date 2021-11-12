@@ -28,8 +28,8 @@ class sgld(base):
             dataset=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=self.model.par
-        for var in self.model.par.keys():
+        par=self.start
+        for var in par.keys():
             par[var].attach_grad()
         j=0
         momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
@@ -108,7 +108,7 @@ class sgld(base):
             for j in range(num_samples):
                 par=dict()
                 for var in posterior_samples.keys():
-                    par.update({var:nd.array(posterior_samples[var][i,j,:],ctx=self.ctx)})
+                    par.update({var:mx.np.array(posterior_samples[var][i,j,:],ctx=self.ctx)})
                 samples=list()
                 loglike=list()
                 labels=list()
@@ -142,8 +142,8 @@ class sgld(base):
 class hierarchical_sgld(sgld):
     
     def softplus(self,x):
-        #return nd.log(1. + nd.exp(x))
-        return nd.exp(x)
+        return nd.log(1. + nd.exp(x))
+        #return nd.exp(x)
 
     def fit(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:
@@ -160,15 +160,19 @@ class hierarchical_sgld(sgld):
             dataset=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=deepcopy(self.start)
+        par=self.start
         scale_prior=mxp.Normal(loc=0.,scale=1.0)
         means_prior=mxp.Normal(loc=0.,scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
-        mean_momentum={var:nd.zeros_like(par[var].as_nd_ndarray(),ctx=self.ctx) for var in par.keys()}
-        std_momentum={var:nd.zeros_like(par[var].as_nd_ndarray(),ctx=self.ctx) for var in par.keys()}
-        eps_momentum={var:nd.zeros_like(par[var].as_nd_ndarray(),ctx=self.ctx) for var in par.keys()}
-        stds={var:scale_prior.sample(par[var].shape).copyto(self.ctx).as_nd_ndarray() for var in par.keys()}
-        means={var:means_prior.sample(par[var].shape).copyto(self.ctx).as_nd_ndarray() for var in par.keys()}
+        
+        mean_momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
+            dtype=par[var].dtype) for var in par.keys()}
+        std_momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
+            dtype=par[var].dtype) for var in par.keys()}
+        eps_momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
+            dtype=par[var].dtype) for var in par.keys()}
+        stds={var:scale_prior.sample(par[var].shape).copyto(self.ctx) for var in par.keys()}
+        means={var:means_prior.sample(par[var].shape).copyto(self.ctx) for var in par.keys()}
         for var in par.keys():
             means[var].attach_grad()
             stds[var].attach_grad()
@@ -184,13 +188,14 @@ class hierarchical_sgld(sgld):
                 with autograd.record():
                     epsilons={var:eps_prior.sample(par[var].shape).copyto(self.ctx).as_nd_ndarray() for var in par.keys()}
                     for var in means.keys():
-                        sigmas[var][:]=self.softplus(stds[var])
-                    loss=self.centered_hierarchical_loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
+                        sigmas[var][:]=self.softplus(stds[var].as_nd_ndarray())
+                        par[var][:]=means[var][:].as_np_ndarray()+epsilons[var][:].as_np_ndarray()*sigmas[var][:].as_np_ndarray()
+                    loss=self.non_centered_hierarchical_loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()
                 lr_decay=self.step_size*((30 + j) ** (-0.55))
                 mean_momentum, means = self.step(lr_decay,mean_momentum, means)
                 std_momentum, stds = self.step(lr_decay,std_momentum, stds)
-                eps_momentum, par = self.step(lr_decay,eps_momentum, par)
+                #eps_momentum, par = self.step(lr_decay,eps_momentum, par)
                 j = j+1 
                 cumulative_loss += nd.mean(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples

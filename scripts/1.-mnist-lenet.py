@@ -41,9 +41,9 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.cpu()
+model_ctx = mx.gpu()
 num_workers = 0
-batch_size = 256 
+batch_size = 512 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
     batch_size=batch_size, shuffle=True, last_batch='discard', num_workers=num_workers)
@@ -63,14 +63,14 @@ print('Stochastic Gradient Descent')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,model.par,step_size=0.1,ctx=model_ctx)
 
-train_sgd=False
+train_sgd=True
 num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,chain_name='lenet_map.h5',verbose=True)
 else:
     map_estimate=h5py.File('lenet_map.h5','r')
-    par={var:nd.array(map_estimate[var][:]) for var in map_estimate.keys()}
+    par={var:mx.np.array(map_estimate[var][:],ctx=model_ctx) for var in map_estimate.keys()}
     map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
@@ -81,7 +81,7 @@ print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
 inference=sgld(model,par,step_size=0.01,ctx=model_ctx)
 
-train_sgld=False
+train_sgld=True
 num_epochs=100
 
 if train_sgld:
@@ -134,7 +134,7 @@ print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
 inference=hierarchical_sgld(model,par,step_size=0.001,ctx=model_ctx)
 
-train_sgld=False
+train_sgld=True
 num_epochs=100
 
 if train_sgld:
