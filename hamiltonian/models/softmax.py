@@ -24,7 +24,7 @@ class softmax():
         return net,par
 
     def reset(self,net):
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
+        #net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
         par=dict()
         for name,gluon_par in net.collect_params().items():
             par.update({name:gluon_par.data()})
@@ -132,12 +132,12 @@ class resnet_softmax(softmax):
         self.net,self.par  = self._init_net(in_units,out_units,n_layers)
         
     def _init_net(self,in_units,out_units,n_layers):
+        data = nd.numpy.ones((1,in_units[0],in_units[1],in_units[2]))
         net = gluon.nn.Sequential()#inicializacion api sequencial
         model=resnet.get_resnet(self.version,n_layers,pretrained=self.pre_trained,ctx=self.ctx)
-        net.add(model.features[:-1])
+        net.add(model.features)
         net.add(gluon.nn.Dense(out_units))#capa de salida
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
+        net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         net(data.as_in_context(self.ctx))
         par=self.reset(net)
         return net,par
@@ -170,7 +170,7 @@ class lenet(softmax):
 
 class vgg_softmax(softmax):
     
-    def __init__(self,_hyper,in_units=(3,256,256),out_units=38,n_layers=16,pre_trained=False,ctx=mx.cpu()):
+    def __init__(self,_hyper,in_units=(3,256,256),out_units=38,n_layers=16,pre_trained=True,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
         self.version=2
@@ -182,8 +182,7 @@ class vgg_softmax(softmax):
         data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
         net = gluon.nn.Sequential()
         model=vgg.get_vgg(n_layers, pretrained=self.pre_trained, ctx=self.ctx)
-        net.add(model.features[:-4])
-        #features_shape=net(data.as_in_context(self.ctx)).shape[1:]
+        net.add(model.features)
         net.add(gluon.nn.Dense(out_units))
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         net(data.as_in_context(self.ctx))

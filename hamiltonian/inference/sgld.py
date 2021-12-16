@@ -32,8 +32,7 @@ class sgld(base):
         for var in par.keys():
             par[var].attach_grad()
         j=0
-        momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
-            dtype=par[var].dtype) for var in par.keys()}
+        momentum={var:nd.numpy.zeros_like(par[var]) for var in par.keys()}
         #single_chain={var:list() for var in par.keys()}
         epsilon=self.step_size
         for i in tqdm(range(epochs)):
@@ -61,9 +60,9 @@ class sgld(base):
     def step(self,epsilon,momentum,par):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
-            grad=par[var].grad.as_nd_ndarray()
+            grad=par[var].grad
             momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
-            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var].as_nd_ndarray() + 1e-8)
+            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)
             par[var][:]=par[var]+normal[var].as_nd_ndarray()
         return momentum, par
 

@@ -28,7 +28,7 @@ class sgd(base):
         par=self.start
         for var in self.start.keys():
             par[var].attach_grad()
-        momentum={var:nd.zeros_like(par[var].as_nd_ndarray()) for var in par.keys()}
+        momentum={var:nd.numpy.zeros_like(par[var]) for var in par.keys()}
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -40,12 +40,13 @@ class sgd(base):
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 momentum,par=self.step(batch_size,momentum,par)
-                cumulative_loss += nd.mean(loss).asscalar()
+                cumulative_loss += nd.numpy.mean(loss)
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         dset=[posterior_samples.create_dataset(var,data=par[var].asnumpy()) for var in par.keys()]
         posterior_samples.attrs['epochs']=epochs
+        posterior_samples.attrs['loss']=loss_val
         posterior_samples.flush()
         posterior_samples.close()
         return par,loss_val
@@ -54,7 +55,7 @@ class sgd(base):
     def step(self,batch_size,momentum,par):
         for var in par.keys():
             #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
-            grad=par[var]
+            grad=par[var].grad
             momentum[var][:] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
             par[var][:]=par[var]-momentum[var]
         return momentum, par
