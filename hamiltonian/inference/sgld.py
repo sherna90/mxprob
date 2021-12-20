@@ -61,9 +61,9 @@ class sgld(base):
         normal=self.draw_momentum(par,epsilon)
         for var in par.keys():
             grad=par[var].grad
-            momentum[var][:] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
-            par[var][:]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)
-            par[var][:]=par[var]+normal[var].as_nd_ndarray()
+            momentum[var] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
+            par[var]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)
+            par[var]=par[var]+normal[var].as_nd_ndarray()
         return momentum, par
 
     def draw_momentum(self,par,epsilon):

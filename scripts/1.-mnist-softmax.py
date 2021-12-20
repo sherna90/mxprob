@@ -37,7 +37,7 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.gpu()
+model_ctx = mx.cpu()
 num_workers = 2
 batch_size = 256 
 train_data = gluon.data.DataLoader(

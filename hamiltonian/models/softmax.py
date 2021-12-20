@@ -23,8 +23,9 @@ class softmax():
         par=self.reset(net)
         return net,par
 
-    def reset(self,net):
-        #net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
+    def reset(self,net,init=True):
+        if init:
+            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
         par=dict()
         for name,gluon_par in net.collect_params().items():
             par.update({name:gluon_par.data()})
@@ -133,13 +134,14 @@ class resnet_softmax(softmax):
         
     def _init_net(self,in_units,out_units,n_layers):
         data = nd.numpy.ones((1,in_units[0],in_units[1],in_units[2]))
-        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net = gluon.nn.HybridSequential()#inicializacion api sequencial
         model=resnet.get_resnet(self.version,n_layers,pretrained=self.pre_trained,ctx=self.ctx)
         net.add(model.features)
         net.add(gluon.nn.Dense(out_units))#capa de salida
         net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         net(data.as_in_context(self.ctx))
-        par=self.reset(net)
+        net.hybridize()
+        par=self.reset(net,init=False)
         return net,par
 
 
@@ -152,7 +154,7 @@ class lenet(softmax):
         self.net,self.par  = self._init_net(in_units,out_units)
         
     def _init_net(self,in_units,out_units):
-        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net = gluon.nn.HybridSequential()#inicializacion api sequencial
         net.add(
             gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='softrelu'),
             gluon.nn.AvgPool2D(pool_size=2, strides=2),
@@ -164,16 +166,16 @@ class lenet(softmax):
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
+        net.hybridize()
         par=self.reset(net)
         return net,par
     
 
 class vgg_softmax(softmax):
     
-    def __init__(self,_hyper,in_units=(3,256,256),out_units=38,n_layers=16,pre_trained=True,ctx=mx.cpu()):
+    def __init__(self,_hyper,in_units=(3,256,256),out_units=2,n_layers=16,pre_trained=True,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
-        self.version=2
         #n_layers = 11, 13, 16, 19.
         self.pre_trained=pre_trained
         self.net,self.par  = self._init_net(in_units,out_units,n_layers)
@@ -184,18 +186,9 @@ class vgg_softmax(softmax):
         model=vgg.get_vgg(n_layers, pretrained=self.pre_trained, ctx=self.ctx)
         net.add(model.features)
         net.add(gluon.nn.Dense(out_units))
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         net(data.as_in_context(self.ctx))
-        if self.pre_trained:
-            net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-            data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
-            net(data.as_in_context(self.ctx))
-            par=self.reset(net[1])
-        else:
-            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-            data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
-            net(data.as_in_context(self.ctx))
-            par=self.reset(net)
+        net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        par=self.reset(net,init=False)
         return net,par
 
 class embeddings_softmax(softmax):
@@ -207,7 +200,7 @@ class embeddings_softmax(softmax):
         
     def _init_net(self,in_units,out_units,n_layers,n_hidden,vocab_size):
         embedding_dim = 100
-        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net = gluon.nn.HybridSequential()#inicializacion api sequencial
         net.add(gluon.nn.Embedding(input_dim=vocab_size, output_dim=in_units))#capa de entrada
         net.add(gluon.nn.GlobalMaxPool1D())
         net.add(gluon.nn.Dense(n_hidden,in_units=in_units,activation='relu'))
@@ -217,6 +210,7 @@ class embeddings_softmax(softmax):
         #net.add(gluon.nn.Dense(32,in_units=in_units,activation='relu'))
         #net.add(gluon.nn.Dense(out_units,in_units=4, activation='sigmoid'))
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        
         par=dict()
         for name,gluon_par in net.collect_params().items():
             par.update({name:gluon_par.data()})

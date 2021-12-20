@@ -22,8 +22,8 @@ class sgd(base):
                 os.remove(args['chain_name'])
             posterior_samples=h5py.File(args['chain_name'],'w')
         else:
-            if os.path.exists(args['map_estimate.h5']):
-                os.remove(args['map_estimate.h5'])
+            if os.path.exists('map_estimate.h5'):
+                os.remove('map_estimate.h5')
             posterior_samples=h5py.File('map_estimate.h5','w')
         par=self.start
         for var in self.start.keys():
@@ -33,7 +33,7 @@ class sgd(base):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             j=0
-            for X_batch, y_batch in data_loader:
+            for X_batch, y_batch in tqdm(data_loader):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
