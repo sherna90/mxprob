@@ -1,6 +1,6 @@
-import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
+from mxnet import np,npx
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
@@ -8,11 +8,12 @@ from hamiltonian.inference.sgd import sgd
 import mxnet.gluon.probability as mxp
 import os
 import h5py 
+npx.set_np()
 
 class bbb(base):
 
     def softplus(self,x):
-        return nd.log(1. + nd.exp(x))
+        return np.log(1. + np.exp(x))
 
     def fit(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:

@@ -33,7 +33,7 @@ class sgd(base):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             j=0
-            for X_batch, y_batch in tqdm(data_loader):
+            for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
@@ -56,8 +56,8 @@ class sgd(base):
         for var in par.keys():
             #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
             grad=par[var].grad
-            momentum[var][:] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
-            par[var][:]=par[var]-momentum[var]
+            momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
+            par[var]=par[var]-momentum[var]
         return momentum, par
 
     def predict(self,par,batch_size=64,num_samples=100,**args):
@@ -69,16 +69,12 @@ class sgd(base):
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
             y_hat=self.model.predict(par,X_test)
-            if isinstance(y_hat.sample(),mx.numpy.ndarray):
-                total_loglike.append(y_hat.log_prob(y_test.as_np_ndarray()).asnumpy())
-            else:
-                total_loglike.append(y_hat.log_prob(y_test).asnumpy())
-            if X_test.shape[0]==batch_size:
-                samples=[]
-                for _ in range(num_samples):
-                    samples.append(y_hat.sample().asnumpy())
-                total_samples.append(samples)
-                total_labels.append(y_test.asnumpy())
+            total_loglike.append(y_hat.log_prob(y_test).asnumpy())
+            samples=[]
+            for _ in range(num_samples):
+                samples.append(y_hat.sample().asnumpy())
+            total_samples.append(samples)
+            total_labels.append(y_test.asnumpy())
         total_samples=np.concatenate(total_samples,axis=1)
         total_labels=np.concatenate(total_labels)
         total_loglike=np.concatenate(total_loglike)

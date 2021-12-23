@@ -1,13 +1,13 @@
 import warnings
 warnings.filterwarnings("ignore")
 
-import numpy as np
 import mxnet as mx
+from mxnet import np,npx
 from mxnet import nd, autograd, gluon
 import mxnet.gluon.probability as mxp
 
 from mxnet.gluon.model_zoo.vision import resnet,vgg 
-               
+npx.set_np()               
 
 class softmax():
     
@@ -29,12 +29,12 @@ class softmax():
         par=dict()
         for name,gluon_par in net.collect_params().items():
             par.update({name:gluon_par.data()})
-            gluon_par.grad_req='null'
+            #gluon_par.grad_req='null'
         return par
 
     def softmax(self, y_linear):
-        exp = nd.exp(y_linear-nd.max(y_linear, axis=1).reshape((-1,1)))
-        norms = nd.sum(exp, axis=1).reshape((-1,1))
+        exp = np.exp(y_linear-np.max(y_linear, axis=1).reshape((-1,1)))
+        norms = np.sum(exp, axis=1).reshape((-1,1))
         return exp / norms
 
     def predict(self, par,X,prob=False):
@@ -45,26 +45,21 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v.as_in_context(self.ctx)
-                #X=nd.array(v,ctx=self.ctx)
         for name,gluon_par in self.net.collect_params().items():
-            if name in par.keys():
-                if isinstance(gluon_par,mx.np.ndarray):
-                    gluon_par.set_data(par[name].as_np_ndarray())
-                else:
-                    gluon_par.set_data(par[name])
+            gluon_par.set_data(par[name])
         y_linear = self.net.forward(X)
-        yhat = self.softmax(y_linear.as_nd_ndarray())
+        yhat = self.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
      
     def negative_log_prior(self, par,**args):
-        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        log_prior=np.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
-            means=nd.zeros(par[var].shape,ctx=self.ctx)
-            sigmas=nd.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
+            means=np.zeros(par[var].shape,ctx=self.ctx)
+            sigmas=np.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
             param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
             #theta=nd.array(par[var]).as_in_context(self.ctx)
-            log_prior=log_prior-nd.sum(param_prior.log_prob(par[var]).as_nd_ndarray())
+            log_prior=log_prior-np.sum(param_prior.log_prob(par[var]))
         return log_prior
     
     def negative_log_likelihood(self,par,**args):
@@ -74,7 +69,7 @@ class softmax():
             elif k=='y_train':
                 y=v
         y_hat = self.forward(par,X_train=X)
-        return -nd.nansum(y_hat.log_prob(y).as_nd_ndarray(),exclude=True)
+        return -np.sum(y_hat.log_prob(y))
         
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
@@ -82,15 +77,15 @@ class softmax():
         return log_like+log_prior
 
     def negative_log_prior_non_centered(self,par, means,epsilons,stds,**args):
-        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        log_prior=np.zeros(shape=1,ctx=self.ctx)
         scale_prior=mxp.Normal(loc=0.0,scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         epsilons_prior=mxp.Normal(loc=0.0,scale=1.0)
         for var in means.keys():
             #log_sigmas=nd.log(stds[var].as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(scale_prior.log_prob(stds[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(epsilons_prior.log_prob(epsilons[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
+            log_prior=log_prior-np.sum(scale_prior.log_prob(stds[var]))
+            log_prior=log_prior-np.sum(epsilons_prior.log_prob(epsilons[var]))
+            log_prior=log_prior-np.sum(location_prior.log_prob(means[var]))
         return log_prior
 
     def negative_log_prior_centered(self,par, means,epsilons,stds,**args):
@@ -154,7 +149,7 @@ class lenet(softmax):
         self.net,self.par  = self._init_net(in_units,out_units)
         
     def _init_net(self,in_units,out_units):
-        net = gluon.nn.HybridSequential()#inicializacion api sequencial
+        net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(
             gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='softrelu'),
             gluon.nn.AvgPool2D(pool_size=2, strides=2),
@@ -166,7 +161,7 @@ class lenet(softmax):
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
-        net.hybridize()
+        #net.hybridize()
         par=self.reset(net)
         return net,par
     
@@ -191,28 +186,3 @@ class vgg_softmax(softmax):
         par=self.reset(net,init=False)
         return net,par
 
-class embeddings_softmax(softmax):
-    
-    def __init__(self,_hyper,in_units,out_units,n_layers,n_hidden,vocab_size,ctx=mx.cpu()):
-        self.hyper=_hyper
-        self.ctx=ctx
-        self.net,self.par  = self._init_net(in_units,out_units,n_layers,n_hidden,vocab_size)
-        
-    def _init_net(self,in_units,out_units,n_layers,n_hidden,vocab_size):
-        embedding_dim = 100
-        net = gluon.nn.HybridSequential()#inicializacion api sequencial
-        net.add(gluon.nn.Embedding(input_dim=vocab_size, output_dim=in_units))#capa de entrada
-        net.add(gluon.nn.GlobalMaxPool1D())
-        net.add(gluon.nn.Dense(n_hidden,in_units=in_units,activation='relu'))
-        for i in range(1,n_layers):
-            net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='sigmoid'))
-        net.add(gluon.nn.Dense(out_units,in_units=n_hidden))
-        #net.add(gluon.nn.Dense(32,in_units=in_units,activation='relu'))
-        #net.add(gluon.nn.Dense(out_units,in_units=4, activation='sigmoid'))
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        
-        par=dict()
-        for name,gluon_par in net.collect_params().items():
-            par.update({name:gluon_par.data()})
-            gluon_par.grad_req='null'
-        return net,par

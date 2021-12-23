@@ -50,7 +50,7 @@ val_data = gluon.data.DataLoader(
 
 
 hyper={'alpha':10.}
-in_units=(28,28)
+in_units=(1,28,28)
 out_units=10
 
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)

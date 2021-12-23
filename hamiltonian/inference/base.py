@@ -66,16 +66,16 @@ class base:
             elif k=='y_train':
                 y_train=v
         num_batches=n_data/batch_size
-        for var in self.model.par.keys():
-            if type(self.model.par[var])=='mxnet.numpy.ndarray':
-                par.update({var:par[var].as_nd_ndarray()})
+        #for var in self.model.par.keys():
+        #    if type(self.model.par[var])=='mxnet.numpy.ndarray':
+        #        par.update({var:par[var].as_nd_ndarray()})
         log_likelihood_sum=self.model.negative_log_likelihood(par,X_train=X_train,y_train=y_train)
         log_prior_sum=self.model.negative_log_prior_non_centered(par,means,epsilons,sigmas,X_train=X_train,y_train=y_train)
-        log_var_posterior=nd.zeros(shape=1,ctx=self.ctx)
+        log_var_posterior=np.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
-            l_kl=1.+nd.log(nd.square(sigmas[var].as_nd_ndarray()))
-            l_kl=l_kl-nd.square(means[var].as_nd_ndarray())
-            l_kl=l_kl-nd.square(sigmas[var].as_nd_ndarray())
-            log_var_posterior=log_var_posterior-0.5*nd.sum(l_kl)
+            l_kl=1.+np.log(np.square(sigmas[var]))
+            l_kl=l_kl-np.square(means[var])
+            l_kl=l_kl-np.square(sigmas[var])
+            log_var_posterior=log_var_posterior-0.5*np.sum(l_kl)
         return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
     
