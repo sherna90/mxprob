@@ -27,9 +27,7 @@ class softmax():
         if init:
             net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
         par=dict()
-        for name,gluon_par in net.collect_params().items():
-            par.update({name:gluon_par.data()})
-            #gluon_par.grad_req='null'
+        par={u:v.data() for u,v in zip(net.collect_params(),net.collect_params().values())}
         return par
 
     def softmax(self, y_linear):
@@ -45,10 +43,9 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v.as_in_context(self.ctx)
-        for name,gluon_par in self.net.collect_params().items():
-            gluon_par.set_data(par[name])
+        [v.set_data(par[u]) for u,v in zip(self.net.collect_params(),self.net.collect_params().values())]      
         y_linear = self.net.forward(X)
-        yhat = self.softmax(y_linear)
+        yhat = npx.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
         return cat
      
@@ -74,7 +71,7 @@ class softmax():
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
         log_prior=self.negative_log_prior(par,**args)
-        return log_like+log_prior
+        return log_like
 
     def negative_log_prior_non_centered(self,par, means,epsilons,stds,**args):
         log_prior=np.zeros(shape=1,ctx=self.ctx)
@@ -149,7 +146,7 @@ class lenet(softmax):
         self.net,self.par  = self._init_net(in_units,out_units)
         
     def _init_net(self,in_units,out_units):
-        net = gluon.nn.Sequential()#inicializacion api sequencial
+        net = gluon.nn.HybridSequential()#inicializacion api sequencial
         net.add(
             gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='softrelu'),
             gluon.nn.AvgPool2D(pool_size=2, strides=2),
@@ -161,7 +158,7 @@ class lenet(softmax):
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
-        #net.hybridize()
+        net.hybridize()
         par=self.reset(net)
         return net,par
     

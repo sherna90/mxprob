@@ -39,6 +39,9 @@ class sgd(base):
                 with autograd.record():
                     loss = self.loss(par,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                for var in self.start.keys():
+                    if par[var].grad is None:
+                        print('None grad {}'.format(var))
                 momentum,par=self.step(batch_size,momentum,par)
                 cumulative_loss += nd.numpy.mean(loss)
             loss_val[i]=cumulative_loss/n_examples
@@ -56,8 +59,11 @@ class sgd(base):
         for var in par.keys():
             #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
             grad=par[var].grad
-            momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
-            par[var]=par[var]-momentum[var]
+            if grad is None:
+                print('Nonetype grad!')
+            else:
+                momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
+                par[var]=par[var]-momentum[var]
         return momentum, par
 
     def predict(self,par,batch_size=64,num_samples=100,**args):
