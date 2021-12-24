@@ -7,11 +7,10 @@ import mxnet.gluon.probability as mxp
 
 class base:
 
-    def __init__(self,model,start_p,step_size=0.1,ctx=mx.cpu()):
+    def __init__(self,model,step_size=0.1,ctx=mx.cpu()):
         self.step_size = step_size
         self.model = model
         self.ctx=ctx
-        self.start = {var:start_p[var] for var in start_p.keys()}
         self.gamma=0.9
         
     def _get_loader(self,**args):

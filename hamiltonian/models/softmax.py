@@ -14,36 +14,28 @@ class softmax():
     def __init__(self,_hyper,in_units,out_units,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
-        self.net,self.par  = self._init_net(in_units,out_units)
+        self.net  = self._init_net(in_units,out_units)
         
     def _init_net(self,in_units,out_units):
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(gluon.nn.Flatten())
         net.add(gluon.nn.Dense(out_units,in_units=in_units[1]*in_units[2]))#capa de salida
-        par=self.reset(net)
-        return net,par
+        self.reset(net)
+        return net
 
     def reset(self,net,init=True):
-        if init:
-            net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=True)
-        par=dict()
-        par={u:v.data() for u,v in zip(net.collect_params(),net.collect_params().values())}
-        return par
+        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=init)
+        return True
 
-    def softmax(self, y_linear):
-        exp = np.exp(y_linear-np.max(y_linear, axis=1).reshape((-1,1)))
-        norms = np.sum(exp, axis=1).reshape((-1,1))
-        return exp / norms
-
-    def predict(self, par,X,prob=False):
-        y_hat=self.forward(par,X_train=X)   
+    def predict(self,X):
+        y_hat=self.forward(X_train=X)   
         return y_hat	
 
-    def forward(self,par, **args):
+    def forward(self,par,**args):
         for k,v in args.items():
             if k=='X_train':
                 X=v.as_in_context(self.ctx)
-        [v.set_data(par[u]) for u,v in zip(self.net.collect_params(),self.net.collect_params().values())]      
+        #[v.set_data(par[u]) for u,v in zip(self.net.collect_params(),self.net.collect_params().values())]      
         y_linear = self.net.forward(X)
         yhat = npx.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
@@ -51,12 +43,11 @@ class softmax():
      
     def negative_log_prior(self, par,**args):
         log_prior=np.zeros(shape=1,ctx=self.ctx)
+        param_prior=mxp.normal.Normal(loc=0.,scale=np.sqrt(self.hyper['alpha']))
         for var in par.keys():
-            means=np.zeros(par[var].shape,ctx=self.ctx)
-            sigmas=np.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
-            param_prior=mxp.normal.Normal(loc=means,scale=sigmas)
-            #theta=nd.array(par[var]).as_in_context(self.ctx)
-            log_prior=log_prior-np.sum(param_prior.log_prob(par[var]))
+            #means=np.zeros(par[var].shape,ctx=self.ctx)
+            #sigmas=np.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
+            log_prior=log_prior-np.sum(param_prior.log_prob(par[var].data()))
         return log_prior
     
     def negative_log_likelihood(self,par,**args):
@@ -86,15 +77,15 @@ class softmax():
         return log_prior
 
     def negative_log_prior_centered(self,par, means,epsilons,stds,**args):
-        log_prior=nd.zeros(shape=1,ctx=self.ctx)
+        log_prior=np.zeros(shape=1,ctx=self.ctx)
         scale_prior=mxp.Normal(loc=0.0,scale=1.0)
         location_prior=mxp.Normal(loc=0.0,scale=1.0)
         for var in means.keys():
             theta_prior=mxp.Normal(loc=means[var],scale=stds[var])
             #log_sigmas=nd.log(stds[var].as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(scale_prior.log_prob(stds[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(location_prior.log_prob(means[var]).as_nd_ndarray())
-            log_prior=log_prior-nd.nansum(theta_prior.log_prob(par[var]).as_nd_ndarray())
+            log_prior=log_prior-np.sum(scale_prior.log_prob(stds[var]))
+            log_prior=log_prior-np.sum(location_prior.log_prob(means[var]))
+            log_prior=log_prior-np.sum(theta_prior.log_prob(par[var].data()))
         return log_prior
 
 
@@ -143,7 +134,7 @@ class lenet(softmax):
     def __init__(self,_hyper,in_units=(1,28,28),out_units=10,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
-        self.net,self.par  = self._init_net(in_units,out_units)
+        self.net  = self._init_net(in_units,out_units)
         
     def _init_net(self,in_units,out_units):
         net = gluon.nn.HybridSequential()#inicializacion api sequencial
@@ -159,8 +150,7 @@ class lenet(softmax):
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
         net.hybridize()
-        par=self.reset(net)
-        return net,par
+        return net
     
 
 class vgg_softmax(softmax):
@@ -170,7 +160,7 @@ class vgg_softmax(softmax):
         self.ctx=ctx
         #n_layers = 11, 13, 16, 19.
         self.pre_trained=pre_trained
-        self.net,self.par  = self._init_net(in_units,out_units,n_layers)
+        self.net  = self._init_net(in_units,out_units,n_layers)
         
     def _init_net(self,in_units,out_units,n_layers):
         data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
@@ -180,6 +170,5 @@ class vgg_softmax(softmax):
         net.add(gluon.nn.Dense(out_units))
         net(data.as_in_context(self.ctx))
         net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        par=self.reset(net,init=False)
-        return net,par
+        return net
 

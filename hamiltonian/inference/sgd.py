@@ -25,10 +25,8 @@ class sgd(base):
             if os.path.exists('map_estimate.h5'):
                 os.remove('map_estimate.h5')
             posterior_samples=h5py.File('map_estimate.h5','w')
-        par=self.start
-        for var in self.start.keys():
-            par[var].attach_grad()
-        momentum={var:nd.numpy.zeros_like(par[var]) for var in par.keys()}
+        params=self.model.net.collect_params()
+        momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()}
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -37,36 +35,33 @@ class sgd(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(par,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                for var in self.start.keys():
-                    if par[var].grad is None:
-                        print('None grad {}'.format(var))
-                momentum,par=self.step(batch_size,momentum,par)
+                momentum,params=self.step(batch_size,momentum,params)
                 cumulative_loss += nd.numpy.mean(loss)
             loss_val[i]=cumulative_loss/n_examples
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-        dset=[posterior_samples.create_dataset(var,data=par[var].asnumpy()) for var in par.keys()]
+        dset=[posterior_samples.create_dataset(var,data=params[var].data().asnumpy()) for var in params.keys()]
         posterior_samples.attrs['epochs']=epochs
         posterior_samples.attrs['loss']=loss_val
         posterior_samples.flush()
         posterior_samples.close()
-        return par,loss_val
+        return params,loss_val
 
-    
-    def step(self,batch_size,momentum,par):
-        for var in par.keys():
-            #grad = np.nan_to_num(par[var].grad).as_nd_ndarray()
-            grad=par[var].grad
-            if grad is None:
-                print('Nonetype grad!')
-            else:
-                momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
-                par[var]=par[var]-momentum[var]
-        return momentum, par
+    def acc(output, label):
+        # output: (batch, num_output) float32 ndarray
+        # label: (batch, ) int32 ndarray
+        return (output.argmax(axis=1) ==label.astype('float32')).mean().asscalar()
 
-    def predict(self,par,batch_size=64,num_samples=100,**args):
+    def step(self,batch_size,momentum,params):
+        for var,par in zip(params,params.values()):
+            grad=par.grad()
+            momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
+            par.data()[:]=par.data()-momentum[var]
+        return momentum,params
+
+    def predict(self,num_samples=100,**args):
         data_loader,n_examples=self._get_loader(**args)
         total_labels=[]
         total_samples=[]
@@ -74,7 +69,7 @@ class sgd(base):
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
-            y_hat=self.model.predict(par,X_test)
+            y_hat=self.model.predict(X_test)
             total_loglike.append(y_hat.log_prob(y_test).asnumpy())
             samples=[]
             for _ in range(num_samples):
