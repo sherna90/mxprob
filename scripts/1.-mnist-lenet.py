@@ -62,7 +62,7 @@ print('Stochastic Gradient Descent')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,step_size=0.1,ctx=model_ctx)
 
-train_sgd=True
+train_sgd=False
 num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,

@@ -27,8 +27,8 @@ class softmax():
         net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=init)
         return True
 
-    def predict(self,X):
-        y_hat=self.forward(X_train=X)   
+    def predict(self,par,X):
+        y_hat=self.forward(par,X_train=X)   
         return y_hat	
 
     def forward(self,par,**args):
@@ -45,8 +45,6 @@ class softmax():
         log_prior=np.zeros(shape=1,ctx=self.ctx)
         param_prior=mxp.normal.Normal(loc=0.,scale=np.sqrt(self.hyper['alpha']))
         for var in par.keys():
-            #means=np.zeros(par[var].shape,ctx=self.ctx)
-            #sigmas=np.ones(par[var].shape,ctx=self.ctx)*np.sqrt(self.hyper['alpha'])
             log_prior=log_prior-np.sum(param_prior.log_prob(par[var].data()))
         return log_prior
     

@@ -61,7 +61,7 @@ class sgd(base):
             par.data()[:]=par.data()-momentum[var]
         return momentum,params
 
-    def predict(self,num_samples=100,**args):
+    def predict(self,par,num_samples=100,**args):
         data_loader,n_examples=self._get_loader(**args)
         total_labels=[]
         total_samples=[]
@@ -69,7 +69,7 @@ class sgd(base):
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
-            y_hat=self.model.predict(X_test)
+            y_hat=self.model.predict(par,X_test)
             total_loglike.append(y_hat.log_prob(y_test).asnumpy())
             samples=[]
             for _ in range(num_samples):
