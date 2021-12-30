@@ -6,7 +6,7 @@ from mxnet import np,npx
 from mxnet import nd, autograd, gluon
 import mxnet.gluon.probability as mxp
 
-from mxnet.gluon.model_zoo.vision import resnet,vgg 
+from mxnet.gluon.model_zoo.vision import get_model
 npx.set_np()               
 
 class softmax():
@@ -87,43 +87,24 @@ class softmax():
         return log_prior
 
 
-class mlp_softmax(softmax):
+class pretrained_model(softmax):
     
-    def __init__(self,_hyper,in_units,out_units,n_layers,n_hidden,ctx=mx.cpu()):
+    def __init__(self,model_name,_hyper,in_units=(1,224,224),out_units=10,ctx=mx.cpu()):
         self.hyper=_hyper
         self.ctx=ctx
-        self.net,self.par  = self._init_net(in_units,out_units,n_layers,n_hidden)
+        self.model_name=model_name
+        self.net = self._init_net(in_units,out_units)
         
-    def _init_net(self,in_units,out_units,n_layers,n_hidden):
-        net = gluon.nn.Sequential()#inicializacion api sequencial
-        net.add(gluon.nn.Dense(n_hidden,in_units=in_units))#capa de entrada
-        for i in range(1,n_layers):
-            net.add(gluon.nn.Dense(n_hidden,in_units=n_hidden,activation='relu'))#capa de entrada
-        net.add(gluon.nn.Dense(out_units,in_units=n_hidden))#capa de entrada
-        par=self.reset(net)
-        return net,par
-
-class resnet_softmax(softmax):
-    
-    def __init__(self,_hyper,in_units=(1,32,32),out_units=10,n_layers=18,pre_trained=False,ctx=mx.cpu()):
-        self.hyper=_hyper
-        self.ctx=ctx
-        self.version=2
-        #n_layers = 18, 34, 50, 101, 152.
-        self.pre_trained=pre_trained
-        self.net,self.par  = self._init_net(in_units,out_units,n_layers)
-        
-    def _init_net(self,in_units,out_units,n_layers):
+    def _init_net(self,in_units,out_units):
         data = nd.numpy.ones((1,in_units[0],in_units[1],in_units[2]))
         net = gluon.nn.HybridSequential()#inicializacion api sequencial
-        model=resnet.get_resnet(self.version,n_layers,pretrained=self.pre_trained,ctx=self.ctx)
+        model=get_model(self.model_name,pretrained=True,ctx=self.ctx)
         net.add(model.features)
         net.add(gluon.nn.Dense(out_units))#capa de salida
         net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
         net(data.as_in_context(self.ctx))
         net.hybridize()
-        par=self.reset(net,init=False)
-        return net,par
+        return net
 
 
 
@@ -151,22 +132,5 @@ class lenet(softmax):
         return net
     
 
-class vgg_softmax(softmax):
-    
-    def __init__(self,_hyper,in_units=(3,256,256),out_units=2,n_layers=16,pre_trained=True,ctx=mx.cpu()):
-        self.hyper=_hyper
-        self.ctx=ctx
-        #n_layers = 11, 13, 16, 19.
-        self.pre_trained=pre_trained
-        self.net  = self._init_net(in_units,out_units,n_layers)
-        
-    def _init_net(self,in_units,out_units,n_layers):
-        data = nd.ones((1,in_units[0],in_units[1],in_units[2]))
-        net = gluon.nn.Sequential()
-        model=vgg.get_vgg(n_layers, pretrained=self.pre_trained, ctx=self.ctx)
-        net.add(model.features)
-        net.add(gluon.nn.Dense(out_units))
-        net(data.as_in_context(self.ctx))
-        net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
-        return net
+
 
