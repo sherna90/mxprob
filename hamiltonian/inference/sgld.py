@@ -28,13 +28,10 @@ class sgld(base):
             dataset=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=self.start
-        for var in par.keys():
-            par[var].attach_grad()
-        j=0
-        momentum={var:nd.numpy.zeros_like(par[var]) for var in par.keys()}
-        #single_chain={var:list() for var in par.keys()}
+        params=self.model.net.collect_params()
+        momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()} #single_chain={var:list() for var in par.keys()}
         epsilon=self.step_size
+        j=0
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -42,11 +39,11 @@ class sgld(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.model.loss(par,X_train=X_batch,y_train=y_batch)
+                    loss = self.model.loss(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 epsilon=self.step_size*((30 + j) ** (-0.55))
-                momentum,par=self.step(epsilon,momentum,par)
-                cumulative_loss += nd.mean(loss).asscalar()
+                momentum,par=self.step(epsilon,momentum,params)
+                cumulative_loss += nd.numpy.mean(loss)
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
             if dataset:
@@ -55,22 +52,23 @@ class sgld(base):
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
-        return par,loss_val
+        return params,loss_val
     
-    def step(self,epsilon,momentum,par):
-        normal=self.draw_momentum(par,epsilon)
-        for var in par.keys():
-            grad=par[var].grad
-            momentum[var] = self.gamma*momentum[var] + (1. - self.gamma) * nd.square(grad)
-            par[var]=par[var]-self.step_size*grad/ nd.sqrt(momentum[var] + 1e-8)
-            par[var]=par[var]+normal[var].as_nd_ndarray()
+    def step(self,epsilon,momentum,params):
+        normal=self.draw_momentum(params,epsilon)
+        for var,par in zip(params,params.values()):
+            if par.grad_req=='write':
+                grad=par.grad()
+                #momentum[var] = self.gamma*momentum[var] + (1. - self.gamma) * nd.np.square(grad)
+                #par=par-self.step_size*grad/ nd.np.sqrt(momentum[var] + 1e-8)
+                par.data()[:]=par.data()-self.step_size*grad+normal[var]
         return momentum, par
 
-    def draw_momentum(self,par,epsilon):
+    def draw_momentum(self,params,epsilon):
         momentum={var:np.sqrt(epsilon)*random.normal(0,1,
-            shape=par[var].shape,
+            shape=params[var].shape,
             ctx=self.ctx,
-            dtype=par[var].dtype) for var in par.keys()}
+            dtype=params[var].dtype) for var in params.keys()}
         return momentum
 
     def sample(self,epochs=1,batch_size=1,chains=2,verbose=False,**args):
@@ -84,7 +82,8 @@ class sgld(base):
             if os.path.exists('posterior_samples.h5'):
                 os.remove('posterior_samples.h5')
             posterior_samples=h5py.File('posterior_samples.h5','w')
-        dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+self.model.par[var].shape,dtype=self.model.par[var].dtype) for var in self.model.par.keys()]
+        params=self.model.net.collect_params()
+        dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+params[var].shape,dtype=params[var].dtype) for var in params.keys()]
         for i in range(chains):
             #self.start=self.model.reset(self.model.net)
             _,loss=self.fit(epochs=epochs,batch_size=batch_size,
@@ -95,7 +94,7 @@ class sgld(base):
         posterior_samples.attrs['loss']=np.stack(loss_values) 
         posterior_samples.flush()
         posterior_samples.close()  
-        return loss_values,posterior_samples
+        return posterior_samples,loss_values
 
     def predict(self,posterior_samples,**args):
         data_loader,_=self._get_loader(**args)
