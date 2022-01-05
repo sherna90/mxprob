@@ -101,12 +101,14 @@ class pretrained_model(softmax):
         model=get_model(self.model_name,pretrained=True,ctx=self.ctx)
         net.add(model.features)
         net.add(gluon.nn.Dense(out_units))#capa de salida
-        net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        self.reset(net)
         net(data.as_in_context(self.ctx))
         net.hybridize()
         return net
 
-
+    def reset(self,net,init=True):
+        net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=init)
+        return True
 
 class lenet(softmax):
     
@@ -125,7 +127,7 @@ class lenet(softmax):
             gluon.nn.Dense(120, activation='sigmoid'), 
             gluon.nn.Dense(84, activation='sigmoid'))
         net.add(gluon.nn.Dense(out_units))#capa de salida
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx)
+        self.reset(net)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
         net.hybridize()

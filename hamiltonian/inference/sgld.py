@@ -85,7 +85,7 @@ class sgld(base):
         params=self.model.net.collect_params()
         dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+params[var].shape,dtype=params[var].dtype) for var in params.keys()]
         for i in range(chains):
-            #self.start=self.model.reset(self.model.net)
+            self.model.reset(self.model.net)
             _,loss=self.fit(epochs=epochs,batch_size=batch_size,
                 chain=i,dataset=posterior_samples,verbose=verbose,**args)
             loss_values.append(loss)
@@ -158,23 +158,24 @@ class hierarchical_sgld(sgld):
             dataset=None
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
-        par=self.start
+        params=self.model.net.collect_params()
+
         scale_prior=mxp.Normal(loc=0.,scale=1.0)
         means_prior=mxp.Normal(loc=0.,scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
         
-        mean_momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
-            dtype=par[var].dtype) for var in par.keys()}
-        std_momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
-            dtype=par[var].dtype) for var in par.keys()}
-        eps_momentum={var:par[var].as_nd_ndarray().zeros_like(ctx=self.ctx,
-            dtype=par[var].dtype) for var in par.keys()}
-        stds={var:scale_prior.sample(par[var].shape).copyto(self.ctx) for var in par.keys()}
-        means={var:means_prior.sample(par[var].shape).copyto(self.ctx) for var in par.keys()}
-        for var in par.keys():
+        mean_momentum={var:params[var].zeros_like(ctx=self.ctx,
+            dtype=params[var].dtype) for var in params.keys()}
+        std_momentum={var:params[var].zeros_like(ctx=self.ctx,
+            dtype=params[var].dtype) for var in params.keys()}
+        eps_momentum={var:params[var].zeros_like(ctx=self.ctx,
+            dtype=params[var].dtype) for var in params.keys()}
+        stds={var:scale_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}
+        means={var:means_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}
+        for var in params.keys():
             means[var].attach_grad()
             stds[var].attach_grad()
-            par[var].attach_grad()
+            params[var].attach_grad()
         for i in tqdm(range(epochs)):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
@@ -182,13 +183,13 @@ class hierarchical_sgld(sgld):
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
-                sigmas={var:nd.zeros_like(means[var].as_nd_ndarray(),ctx=self.ctx) for var in means.keys()}
+                sigmas={var:nd.numpy.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
                 with autograd.record():
-                    epsilons={var:eps_prior.sample(par[var].shape).copyto(self.ctx).as_nd_ndarray() for var in par.keys()}
+                    epsilons={var:eps_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}
                     for var in means.keys():
-                        sigmas[var][:]=self.softplus(stds[var].as_nd_ndarray())
-                        par[var][:]=means[var][:].as_np_ndarray()+epsilons[var][:].as_np_ndarray()*sigmas[var][:].as_np_ndarray()
-                    loss=self.non_centered_hierarchical_loss(par,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
+                        sigmas[var][:]=self.softplus(stds[var])
+                        params[var].data()[:]=means[var][:]+epsilons[var][:]*sigmas[var][:]
+                    loss=self.non_centered_hierarchical_loss(params,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
                 loss.backward()
                 lr_decay=self.step_size*((30 + j) ** (-0.55))
                 mean_momentum, means = self.step(lr_decay,mean_momentum, means)
@@ -198,8 +199,8 @@ class hierarchical_sgld(sgld):
                 cumulative_loss += nd.mean(loss).asscalar()
             loss_val[i]=cumulative_loss/n_examples
             if dataset:
-                for var in par.keys():
-                    dataset[var][chain,i,:]=par[var].asnumpy()
+                for var in params.keys():
+                    dataset[var][chain,i,:]=params[var].data().asnumpy()
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
-        return par,loss_val
+        return params,loss_val
