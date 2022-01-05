@@ -48,7 +48,7 @@ class sgld(base):
             loss_val[i]=cumulative_loss/n_examples
             if dataset:
                 for var in params.keys():
-                    dataset[var][chain,i,:]=params[var].asnumpy()
+                    dataset[var][chain,i,:]=params[var].data().asnumpy()
             if verbose and (i%(epochs/10)==0):
                 print('loss: {0:.4f}'.format(loss_val[i]))
         #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
