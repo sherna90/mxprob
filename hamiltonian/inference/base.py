@@ -4,7 +4,7 @@ from mxnet import nd, autograd, gluon
 from tqdm import tqdm, trange
 from copy import deepcopy
 import mxnet.gluon.probability as mxp
-
+from mxnet.gluon.loss import KLDivLoss
 class base:
 
     def __init__(self,model,step_size=0.1,ctx=mx.cpu()):
@@ -59,17 +59,9 @@ class base:
         return log_like+log_prior
 
     def variational_loss(self,par,means,epsilons,sigmas,n_data,batch_size,**args):
-        for k,v in args.items():
-            if k=='X_train':
-                X_train=v
-            elif k=='y_train':
-                y_train=v
         num_batches=n_data/batch_size
-        #for var in self.model.par.keys():
-        #    if type(self.model.par[var])=='mxnet.numpy.ndarray':
-        #        par.update({var:par[var].as_nd_ndarray()})
-        log_likelihood_sum=self.model.negative_log_likelihood(par,X_train=X_train,y_train=y_train)
-        log_prior_sum=self.model.negative_log_prior_non_centered(par,means,epsilons,sigmas,X_train=X_train,y_train=y_train)
+        log_likelihood_sum=self.model.negative_log_likelihood(par,**args)
+        log_prior_sum=self.model.negative_log_prior_non_centered(par,means,epsilons,sigmas,**args)
         log_var_posterior=np.zeros(shape=1,ctx=self.ctx)
         for var in par.keys():
             l_kl=1.+np.log(np.square(sigmas[var]))
@@ -77,4 +69,10 @@ class base:
             l_kl=l_kl-np.square(sigmas[var])
             log_var_posterior=log_var_posterior-0.5*np.sum(l_kl)
         return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
+    
+    def distillation_loss(self,par,teacher_predictions,student_predictions,alpha,**args):
+        log_likelihood_sum=self.model.negative_log_likelihood(par,**args)
+        log_prior_sum=self.model.negative_log_prior(par,**args)
+        kl_loss = KLDivLoss(teacher_predictions,student_predictions,from_logits=False)
+        return  alpha*(log_prior_sum + log_likelihood_sum)+(1.-alpha)*kl_loss
     

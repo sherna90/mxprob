@@ -35,7 +35,7 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v.as_in_context(self.ctx)
-        #[v.set_data(par[u]) for u,v in zip(self.net.collect_params(),self.net.collect_params().values())]      
+        [v.set_data(par[u]) for u,v in zip(self.net.collect_params(),self.net.collect_params().values())]      
         y_linear = self.net.forward(X)
         yhat = npx.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
@@ -60,7 +60,7 @@ class softmax():
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
         log_prior=self.negative_log_prior(par,**args)
-        return log_like
+        return log_like+log_prior
 
     def negative_log_prior_non_centered(self,par, means,epsilons,stds,**args):
         log_prior=np.zeros(shape=1,ctx=self.ctx)
