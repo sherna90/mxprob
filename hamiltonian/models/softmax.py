@@ -35,7 +35,10 @@ class softmax():
         for k,v in args.items():
             if k=='X_train':
                 X=v.as_in_context(self.ctx)
-        [v.set_data(par[u]) for u,v in zip(self.net.collect_params(),self.net.collect_params().values())]      
+        params=self.net.collect_params()
+        for var,theta in zip(params,params.values()):
+            if theta.grad_req==True and par[var]:
+                theta.data()[:]=par[var]
         y_linear = self.net.forward(X)
         yhat = npx.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
