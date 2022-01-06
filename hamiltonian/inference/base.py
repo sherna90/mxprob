@@ -44,6 +44,25 @@ class base:
         return initial_step_size * (1.0/(1.0+step*decay_factor*num_batches))
         #return initial_step_size - (decay_factor*step/num_batches)
 
+    def predict_sample(self,par,data_loader):
+        samples=list()
+        loglike=list()
+        labels=list()
+        for X_test,y_test in data_loader:
+            X_test=X_test.as_in_context(self.ctx)
+            y_test=y_test.as_in_context(self.ctx)
+            labels.append(y_test)
+            y_pred=self.model.predict(par,X_test)
+            if isinstance(y_pred.sample(),mx.numpy.ndarray):
+                loglike.append(y_pred.log_prob(y_test.as_np_ndarray()))
+            else:
+                loglike.append(y_pred.log_prob(y_test))
+            samples.append(y_pred.sample())
+        samples=np.concatenate(samples)
+        labels=np.concatenate(labels)
+        loglike=np.concatenate(loglike)
+        return samples.asnumpy(),labels.asnumpy(),loglike.asnumpy()
+
     def loss(self,par,X_train,y_train):
         batch_size=X_train.shape[0]
         return self.model.loss(par,X_train=X_train,y_train=y_train)*1./batch_size

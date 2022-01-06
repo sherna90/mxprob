@@ -32,8 +32,10 @@ class sgld(base):
         momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()} #single_chain={var:list() for var in par.keys()}
         epsilon=self.step_size
         j=0
+        data_loader,n_examples=self._get_loader(**args)
+        if 'val_data_loader' in args:
+            val_data_loader=args['val_data_loader']
         for i in tqdm(range(epochs)):
-            data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
@@ -49,9 +51,14 @@ class sgld(base):
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
-            if verbose and (i%(epochs/10)==0):
-                print('loss: {0:.4f}'.format(loss_val[i]))
-        #posterior_samples_single_chain={var:np.asarray(single_chain[var]) for var in single_chain}
+            if verbose:
+                print('iteration {j}, train loss: {0:.4f}'.format(loss_val[i]))
+                if val_data_loader:
+                    val_sample,val_labels,val_log_like=self.predict_sample(params,val_data_loader)
+                    y_hat=np.quantile(val_sample,.5,axis=0)
+                    cmp = y_hat.astype(val_labels.dtype) == val_labels
+                    acc=float(cmp.astype(val_labels.dtype).sum())/len(val_labels)
+                    print('val log-like: {0:.4f}, val accuracy : {1:.4f}'.format(np.mean(val_log_like),acc))
         return params,loss_val
     
     def step(self,epsilon,momentum,params):
@@ -102,11 +109,15 @@ class sgld(base):
         num_samples=posterior_samples.attrs['num_samples']
         num_chains=posterior_samples.attrs['num_chains']
         total_loglike=list()
+        params=self.model.net.collect_params()
         for i in range(num_chains):
             for j in range(num_samples):
                 par=dict()
                 for var in posterior_samples.keys():
                     par.update({var:mx.np.array(posterior_samples[var][i,j,:],ctx=self.ctx)})
+                for var,theta in zip(params,params.values()):
+                    if var in par:
+                        theta.data()[:]=par[var]
                 samples=list()
                 loglike=list()
                 labels=list()
@@ -126,6 +137,7 @@ class sgld(base):
         total_loglike=np.stack(total_loglike)
         total_labels=np.concatenate(labels)
         return total_samples,total_labels,total_loglike
+
 
     def posterior_diagnostics(self,posterior_samples):
         num_chains=posterior_samples.attrs['num_chains']
