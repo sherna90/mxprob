@@ -30,7 +30,7 @@ class softmax():
     def predict(self,par,X):
         params=self.net.collect_params()
         for var,theta in zip(params,params.values()):
-            if theta.grad_req==True and par[var]:
+            if var in par:
                 theta.data()[:]=par[var]
         y_hat=self.forward(par,X_train=X)   
         return y_hat	

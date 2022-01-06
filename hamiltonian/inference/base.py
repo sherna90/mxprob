@@ -70,9 +70,9 @@ class base:
             log_var_posterior=log_var_posterior-0.5*np.sum(l_kl)
         return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
     
-    def distillation_loss(self,par,teacher_predictions,student_predictions,alpha,**args):
+    def distillation_loss(self,par,teacher_predictions,student_predictions,n_data,**args):
         log_likelihood_sum=self.model.negative_log_likelihood(par,**args)
         log_prior_sum=self.model.negative_log_prior(par,**args)
         kl_loss = KLDivLoss(teacher_predictions,student_predictions,from_logits=False)
-        return  alpha*(log_prior_sum + log_likelihood_sum)+(1.-alpha)*kl_loss
+        return  1.0 / n_data * (kl_loss + log_prior_sum) + log_likelihood_sum
     
