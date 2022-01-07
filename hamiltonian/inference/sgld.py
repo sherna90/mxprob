@@ -2,6 +2,7 @@ from mxnet.ndarray.contrib import isnan
 import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon,random
+from mxnet.gluon.metric import Accuracy
 from mxnet.ndarray import clip
 import mxnet.gluon.probability as mxp
 from copy import deepcopy
@@ -32,46 +33,45 @@ class sgld(base):
         epsilon=self.step_size
         j=0
         data_loader,n_examples=self._get_loader(**args)
-        if 'val_data_loader' in args:
-            val_data_loader=args['val_data_loader']
+        if 'valid_data_loader' in args:
+            val_data_loader=args['valid_data_loader']
+        else:
+            val_data_loader=None
+        accuracy=Accuracy()
         for i in range(epochs):
-            cumulative_loss=0
+            cumulative_loss=list()
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.model.loss(params,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                epsilon=self.step_size*((30 + j) ** (-0.55))
-                momentum,par=self.step(epsilon,momentum,params)
-                cumulative_loss += nd.numpy.sum(loss)
+                momentum,params=self.step(momentum,params)
+                y_pred=self.model.predict(params,X_batch)
+                accuracy.update(y_batch, y_pred.sample())
+                cumulative_loss.append(loss)
                 j=j+1
-            loss_val[i]=cumulative_loss/n_examples
+            loss_val[i]=np.sum(cumulative_loss)/n_examples
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
             if verbose:
-                print('iteration {0}, train loss: {1:.4f}'.format(i,loss_val[i]))
-                if val_data_loader:
-                    val_sample,val_labels,val_log_like=self.predict_sample(params,val_data_loader)
-                    y_hat=np.quantile(val_sample,.5,axis=0)
-                    cmp = y_hat.astype(val_labels.dtype) == val_labels
-                    acc=float(cmp.astype(val_labels.dtype).sum())/len(val_labels)
-                    print('| val loss : {0:.4f}, val accuracy : {1:.4f}'.format(np.mean(val_log_like),acc))
+                _,train_accuracy=accuracy.get()
+                print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
         return params,loss_val
     
-    def step(self,epsilon,momentum,params):
-        normal=self.draw_momentum(params,epsilon)
+    def step(self,momentum,params):
+        normal=self.draw_momentum(params,self.step_size)
         for var,par in zip(params,params.values()):
             if par.grad_req=='write':
                 grad=par.grad()
-                #momentum[var] = self.gamma*momentum[var] + (1. - self.gamma) * nd.np.square(grad)
-                #par=par-self.step_size*grad/ nd.np.sqrt(momentum[var] + 1e-8)
-                par.data()[:]=par.data()-self.step_size*grad+normal[var]
-        return momentum, par
+                momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
+                #par.data()[:]=par.data()-self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)
+                par.data()[:]=par.data()-momentum[var] 
+        return momentum, params
 
     def draw_momentum(self,params,epsilon):
-        momentum={var:np.sqrt(epsilon)*random.normal(0,1,
+        momentum={var:random.normal(0,np.sqrt(epsilon),
             shape=params[var].shape,
             ctx=self.ctx,
             dtype=params[var].dtype) for var in params.keys()}
@@ -91,7 +91,7 @@ class sgld(base):
         params=self.model.net.collect_params()
         dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+params[var].shape,dtype=params[var].dtype) for var in params.keys()]
         for i in range(chains):
-            self.model.reset(self.model.net)
+            self.model.reset(self.model.net,sigma=1e-5,init=True)
             _,loss=self.fit(epochs=epochs,batch_size=batch_size,
                 chain=i,dataset=posterior_samples,verbose=verbose,**args)
             loss_values.append(loss)

@@ -43,32 +43,28 @@ class sgd(base):
                 with autograd.record():
                     loss = self.loss(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                momentum,params=self.step(momentum,params)
                 y_pred=self.model.predict(params,X_batch)
                 accuracy.update(y_batch, y_pred.sample())
-                momentum,params=self.step(batch_size,momentum,params)
                 cumulative_loss.append(loss)
             loss_val[i]=np.sum(cumulative_loss)/n_examples
             _,train_accuracy=accuracy.get()
             if verbose:
                 print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
-                '''if val_data_loader:                    
-                    _,_,val_loss,val_accuracy=self.predict_sample(params,val_data_loader)
-                    print('| val loss : {0:.4f}, val accuracy : {1:.4f}'.format(val_loss,val_accuracy))
-                else:
-                    print('')'''
         dset=[posterior_samples.create_dataset(var,data=params[var].data().asnumpy()) for var in params.keys()]
         posterior_samples.attrs['epochs']=epochs
         posterior_samples.attrs['loss']=loss_val
         posterior_samples.flush()
         posterior_samples.close()
-        return params,loss_val
+        par={var:params[var].data() for var in params.keys()}
+        return par,loss_val
 
     def acc(output, label):
         # output: (batch, num_output) float32 ndarray
         # label: (batch, ) int32 ndarray
         return (output.argmax(axis=1) ==label.astype('float32')).mean().asscalar()
 
-    def step(self,batch_size,momentum,params):
+    def step(self,momentum,params):
         for var,par in zip(params,params.values()):
             if par.grad_req=='write':
                 grad=par.grad()
@@ -81,6 +77,10 @@ class sgd(base):
         total_labels=[]
         total_samples=[]
         total_loglike=[]
+        params=self.model.net.collect_params()
+        for var,theta in zip(params,params.values()):
+            if var in par:
+                theta.data()[:]=par[var]
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)

@@ -3,7 +3,7 @@ warnings.filterwarnings("ignore")
 
 import mxnet as mx
 from mxnet import np,npx
-from mxnet import nd, autograd, gluon
+from mxnet import nd, autograd, gluon,random
 import mxnet.gluon.probability as mxp
 
 from mxnet.gluon.model_zoo.vision import get_model
@@ -23,8 +23,14 @@ class softmax():
         self.reset(net)
         return net
 
-    def reset(self,net,init=True):
-        net.initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=init)
+    def reset(self,net,sigma=0.01,init=True):
+        if init:
+            net.initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
+        else:
+            params=self.net.collect_params()
+            eps={var:random.normal(0,sigma,shape=params[var].shape,ctx=self.ctx,dtype=params[var].dtype) for var in params.keys()}
+            for var,par in zip(params,params.values()):
+                par.data()[:]=par.data()+eps[var]
         return True
 
     def predict(self,par,X):
@@ -106,8 +112,8 @@ class pretrained_model(softmax):
         net.hybridize()
         return net
 
-    def reset(self,net,init=True):
-        net[1].initialize(init=mx.init.Normal(sigma=0.01), ctx=self.ctx, force_reinit=init)
+    def reset(self,net,sigma=0.01,init=True):
+        net[1].initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
         return True
 
 class lenet(softmax):

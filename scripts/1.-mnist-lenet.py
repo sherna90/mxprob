@@ -40,9 +40,9 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.cpu()
-num_workers = 0
-batch_size = 256 
+model_ctx = mx.gpu()
+num_workers = 10
+batch_size = 512 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
     batch_size=batch_size, shuffle=True, last_batch='discard', num_workers=num_workers)
@@ -60,10 +60,10 @@ out_units=10
 print('#######################################')
 print('Stochastic Gradient Descent')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,step_size=0.001,ctx=model_ctx)
+inference=sgd(model,step_size=0.1,ctx=model_ctx)
 
-train_sgd=True
-num_epochs=100
+train_sgd=False
+num_epochs=30
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,
@@ -78,27 +78,27 @@ total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
-'''print('#######################################')
+print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
-inference=sgld(model,par,step_size=0.01,ctx=model_ctx)
+inference=sgld(model,step_size=0.001,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=100
+num_epochs=30
 
 if train_sgld:
-    loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
+    posterior_samples,loss=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
                                 verbose=True,chain_name='lenet_posterior.h5')
+else:
+    posterior_samples=h5py.File('lenet_posterior.h5','r')
+    loss=posterior_samples.attrs['loss'][:]
 
-posterior_samples=h5py.File('lenet_posterior.h5','r')
-
-loss=posterior_samples.attrs['loss'][:]
 plot_loss(loss,'SGLD Hierarchical Lenet','sgld_hierarchical_lenet.pdf')
 
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
-
+''''
 
 samples={var:posterior_samples[var] for var in posterior_samples.keys()}
 samples={var:np.swapaxes(samples[var],0,1) for var in model.par}

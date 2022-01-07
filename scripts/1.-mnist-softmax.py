@@ -37,7 +37,7 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.cpu()
+model_ctx = mx.gpu()
 num_workers = 0
 batch_size = 256 
 train_data = gluon.data.DataLoader(
@@ -59,7 +59,7 @@ print('Stochastic Gradient Descent')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,step_size=0.001,ctx=model_ctx)
 
-train_sgd=True
+train_sgd=False
 num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,

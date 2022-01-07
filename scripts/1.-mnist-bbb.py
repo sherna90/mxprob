@@ -46,28 +46,9 @@ val_data = gluon.data.DataLoader(
 
 
 hyper={'alpha':10.}
-in_units=(28,28)
+in_units=(1,28,28)
 out_units=10
 
-
-print('#######################################')
-print('Stochastic Gradient Descent')
-model=softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
-
-train_sgd=True
-num_epochs=100
-if train_sgd:
-    par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
-                           data_loader=train_data,chain_name='mnist_map.h5',verbose=True)
-else:
-    map_estimate=h5py.File('mnist_map.h5','r')
-    par={var:map_estimate[var][:] for var in map_estimate.keys()}
-    map_estimate.close()
-
-total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
-y_hat=np.quantile(total_samples,.5,axis=0)
-print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 print('#######################################')
 print('Bayes By Backprop')

@@ -61,7 +61,7 @@ class base:
             accuracy.update(y_test, y_pred.sample())
         samples=np.concatenate(samples)
         labels=np.concatenate(labels)
-        #loss_values=np.sum(loss_values)/n_examples
+        loss_values=np.sum(loss_values)/n_examples
         _, acc = accuracy.get()
         return samples.asnumpy(),labels.asnumpy(),loss_values, acc
 
