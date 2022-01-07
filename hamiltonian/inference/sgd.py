@@ -2,6 +2,7 @@ import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
 from mxnet.ndarray import clip
+from mxnet.gluon.metric import Accuracy
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
@@ -27,21 +28,34 @@ class sgd(base):
             posterior_samples=h5py.File('map_estimate.h5','w')
         params=self.model.net.collect_params()
         momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()}
-        for i in tqdm(range(epochs)):
-            data_loader,n_examples=self._get_loader(**args)
-            cumulative_loss=0
-            j=0
+        if 'valid_data_loader' in args:
+            val_data_loader=args['valid_data_loader']
+        else:
+            val_data_loader=None
+        data_loader,n_examples=self._get_loader(**args)
+        j=0
+        accuracy=Accuracy()
+        for i in range(epochs):
+            cumulative_loss=list()
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     loss = self.loss(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                y_pred=self.model.predict(params,X_batch)
+                accuracy.update(y_batch, y_pred.sample())
                 momentum,params=self.step(batch_size,momentum,params)
-                cumulative_loss += nd.numpy.mean(loss)
-            loss_val[i]=cumulative_loss/n_examples
-            if verbose and (i%(epochs/10)==0):
-                print('loss: {0:.4f}'.format(loss_val[i]))
+                cumulative_loss.append(loss)
+            loss_val[i]=np.sum(cumulative_loss)/n_examples
+            _,train_accuracy=accuracy.get()
+            if verbose:
+                print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
+                '''if val_data_loader:                    
+                    _,_,val_loss,val_accuracy=self.predict_sample(params,val_data_loader)
+                    print('| val loss : {0:.4f}, val accuracy : {1:.4f}'.format(val_loss,val_accuracy))
+                else:
+                    print('')'''
         dset=[posterior_samples.create_dataset(var,data=params[var].data().asnumpy()) for var in params.keys()]
         posterior_samples.attrs['epochs']=epochs
         posterior_samples.attrs['loss']=loss_val

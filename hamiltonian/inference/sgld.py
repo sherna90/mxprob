@@ -4,7 +4,6 @@ import mxnet as mx
 from mxnet import nd, autograd, gluon,random
 from mxnet.ndarray import clip
 import mxnet.gluon.probability as mxp
-from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
 from hamiltonian.inference.sgd import sgd
@@ -35,7 +34,7 @@ class sgld(base):
         data_loader,n_examples=self._get_loader(**args)
         if 'val_data_loader' in args:
             val_data_loader=args['val_data_loader']
-        for i in tqdm(range(epochs)):
+        for i in range(epochs):
             cumulative_loss=0
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
@@ -45,20 +44,20 @@ class sgld(base):
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 epsilon=self.step_size*((30 + j) ** (-0.55))
                 momentum,par=self.step(epsilon,momentum,params)
-                cumulative_loss += nd.numpy.mean(loss)
+                cumulative_loss += nd.numpy.sum(loss)
                 j=j+1
             loss_val[i]=cumulative_loss/n_examples
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
             if verbose:
-                print('iteration {j}, train loss: {0:.4f}'.format(loss_val[i]))
+                print('iteration {0}, train loss: {1:.4f}'.format(i,loss_val[i]))
                 if val_data_loader:
                     val_sample,val_labels,val_log_like=self.predict_sample(params,val_data_loader)
                     y_hat=np.quantile(val_sample,.5,axis=0)
                     cmp = y_hat.astype(val_labels.dtype) == val_labels
                     acc=float(cmp.astype(val_labels.dtype).sum())/len(val_labels)
-                    print('val log-like: {0:.4f}, val accuracy : {1:.4f}'.format(np.mean(val_log_like),acc))
+                    print('| val loss : {0:.4f}, val accuracy : {1:.4f}'.format(np.mean(val_log_like),acc))
         return params,loss_val
     
     def step(self,epsilon,momentum,params):
@@ -188,7 +187,7 @@ class hierarchical_sgld(sgld):
             means[var].attach_grad()
             stds[var].attach_grad()
             params[var].attach_grad()
-        for i in tqdm(range(epochs)):
+        for i in range(epochs):
             data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=0
             j=0

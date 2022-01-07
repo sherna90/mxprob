@@ -4,6 +4,7 @@ from mxnet import nd, autograd, gluon
 from tqdm import tqdm, trange
 from copy import deepcopy
 import mxnet.gluon.probability as mxp
+from mxnet.gluon.metric import Accuracy
 from mxnet.gluon.loss import KLDivLoss
 class base:
 
@@ -45,23 +46,24 @@ class base:
         #return initial_step_size - (decay_factor*step/num_batches)
 
     def predict_sample(self,par,data_loader):
+        n_examples=len(data_loader)
         samples=list()
-        loglike=list()
         labels=list()
+        loss_values=list()
+        accuracy=Accuracy()
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
             labels.append(y_test)
             y_pred=self.model.predict(par,X_test)
-            if isinstance(y_pred.sample(),mx.numpy.ndarray):
-                loglike.append(y_pred.log_prob(y_test.as_np_ndarray()))
-            else:
-                loglike.append(y_pred.log_prob(y_test))
+            loss_values.append(self.loss(par,X_train=X_test,y_train=y_test))
             samples.append(y_pred.sample())
+            accuracy.update(y_test, y_pred.sample())
         samples=np.concatenate(samples)
         labels=np.concatenate(labels)
-        loglike=np.concatenate(loglike)
-        return samples.asnumpy(),labels.asnumpy(),loglike.asnumpy()
+        #loss_values=np.sum(loss_values)/n_examples
+        _, acc = accuracy.get()
+        return samples.asnumpy(),labels.asnumpy(),loss_values, acc
 
     def loss(self,par,X_train,y_train):
         batch_size=X_train.shape[0]
