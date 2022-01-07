@@ -42,6 +42,7 @@ class softmax():
      
     def negative_log_prior(self, par,**args):
         log_prior=np.zeros(shape=1,ctx=self.ctx)
+        #param_size=np.sum([par[var].data().size for var in par.keys()])
         param_prior=mxp.normal.Normal(loc=0.,scale=np.sqrt(self.hyper['alpha']))
         for var in par.keys():
             log_prior=log_prior-np.sum(param_prior.log_prob(par[var].data()))
