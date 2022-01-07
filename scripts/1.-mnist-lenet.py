@@ -40,9 +40,9 @@ transform = transforms.Compose([
 ])
 
 num_gpus = 0
-model_ctx = mx.gpu()
-num_workers = 4
-batch_size = 512 
+model_ctx = mx.cpu()
+num_workers = 0
+batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
     batch_size=batch_size, shuffle=True, last_batch='discard', num_workers=num_workers)
@@ -60,18 +60,18 @@ out_units=10
 print('#######################################')
 print('Stochastic Gradient Descent')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,step_size=0.1,ctx=model_ctx)
+inference=sgd(model,step_size=0.001,ctx=model_ctx)
 
-train_sgd=False
+train_sgd=True
 num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
-                           data_loader=train_data,chain_name='lenet_map.h5',verbose=True)
+                           data_loader=train_data,
+                           valid_data_loader=val_data,
+                           chain_name='lenet_map.h5',verbose=True)
 else:
     map_estimate=h5py.File('lenet_map.h5','r')
-    par=model.net.collect_params()
-    trained_params={var:mx.np.array(map_estimate[var][:],ctx=model_ctx) for var in map_estimate.keys()}
-    [v.set_data(trained_params[u]) for u,v in zip(par,par.values())]
+    par={var:mx.np.array(map_estimate[var][:],ctx=model_ctx) for var in map_estimate.keys()}
     map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)

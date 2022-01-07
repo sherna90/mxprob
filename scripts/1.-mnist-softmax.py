@@ -38,7 +38,7 @@ transform = transforms.Compose([
 
 num_gpus = 0
 model_ctx = mx.cpu()
-num_workers = 2
+num_workers = 0
 batch_size = 256 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
@@ -57,13 +57,15 @@ out_units=10
 print('#######################################')
 print('Stochastic Gradient Descent')
 model=softmax(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,model.par,step_size=0.001,ctx=model_ctx)
+inference=sgd(model,step_size=0.001,ctx=model_ctx)
 
-train_sgd=False
+train_sgd=True
 num_epochs=100
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
-                           data_loader=train_data,chain_name='mnist_map.h5',verbose=True)
+                           data_loader=train_data,
+                           valid_data_loader=val_data,
+                           chain_name='mnist_map.h5',verbose=True)
 
 else:
     map_estimate=h5py.File('mnist_map.h5','r')
@@ -74,7 +76,7 @@ total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
-print('#######################################')
+""" print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
 inference=sgld(model,par,step_size=0.001,ctx=model_ctx)
 
@@ -196,3 +198,4 @@ plt.title('ESS')
 plt.savefig('ess_softmax.pdf', bbox_inches='tight')
 
 
+ """
