@@ -66,10 +66,12 @@ class sgd(base):
 
     def step(self,momentum,params):
         for var,par in zip(params,params.values()):
-            if par.grad_req=='write':
+            try:
                 grad=par.grad()
                 momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
                 par.data()[:]=par.data()-momentum[var]
+            except:
+                None
         return momentum,params
 
     def predict(self,par,num_samples=100,**args):

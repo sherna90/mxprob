@@ -63,11 +63,14 @@ class sgld(base):
     def step(self,momentum,params):
         normal=self.draw_momentum(params,self.step_size)
         for var,par in zip(params,params.values()):
-            if par.grad_req=='write':
+            try:
                 grad=par.grad()
-                momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
-                #par.data()[:]=par.data()-self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)
-                par.data()[:]=par.data()-momentum[var] 
+                momentum[var] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                #momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
+                par.data()[:]=par.data()-self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]
+                #par.data()[:]=par.data()-momentum[var] 
+            except:
+                None
         return momentum, params
 
     def draw_momentum(self,params,epsilon):
@@ -91,7 +94,7 @@ class sgld(base):
         params=self.model.net.collect_params()
         dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+params[var].shape,dtype=params[var].dtype) for var in params.keys()]
         for i in range(chains):
-            self.model.reset(self.model.net,sigma=1e-5,init=True)
+            self.model.reset(self.model.net,sigma=1e-3,init=False)
             _,loss=self.fit(epochs=epochs,batch_size=batch_size,
                 chain=i,dataset=posterior_samples,verbose=verbose,**args)
             loss_values.append(loss)
@@ -151,7 +154,7 @@ class sgld(base):
 class hierarchical_sgld(sgld):
     
     def softplus(self,x):
-        return nd.log(1. + nd.exp(x))
+        return nd.np.log(1. + nd.np.exp(x))
         #return nd.exp(x)
 
     def fit(self,epochs=1,batch_size=1,**args):
@@ -175,43 +178,47 @@ class hierarchical_sgld(sgld):
         means_prior=mxp.Normal(loc=0.,scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
         
-        mean_momentum={var:params[var].zeros_like(ctx=self.ctx,
-            dtype=params[var].dtype) for var in params.keys()}
-        std_momentum={var:params[var].zeros_like(ctx=self.ctx,
-            dtype=params[var].dtype) for var in params.keys()}
-        eps_momentum={var:params[var].zeros_like(ctx=self.ctx,
-            dtype=params[var].dtype) for var in params.keys()}
-        stds={var:scale_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}
-        means={var:means_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}
-        for var in params.keys():
-            means[var].attach_grad()
-            stds[var].attach_grad()
-            params[var].attach_grad()
+        mean_momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys() if params[var].grad_req=='write'} #single_chain={var:list() for var in par.keys()}
+        std_momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys() if params[var].grad_req=='write'} #single_chain={var:list() for var in par.keys()}
+        
+        stds={var:scale_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys() if params[var].grad_req=='write'}
+        means={var:means_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys() if params[var].grad_req=='write'}
+        for (m,s,p) in zip(means.values(),stds.values(),params.values()):
+            m.attach_grad()
+            s.attach_grad()
+            p.grad_req='null'
+        accuracy=Accuracy()
         for i in range(epochs):
             data_loader,n_examples=self._get_loader(**args)
-            cumulative_loss=0
+            cumulative_loss=list()
             j=0
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
-                sigmas={var:nd.numpy.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
+                epsilons={var:eps_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}            
+                #sigmas={var:nd.numpy.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
                 with autograd.record():
-                    epsilons={var:eps_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}
-                    for var in means.keys():
-                        sigmas[var][:]=self.softplus(stds[var])
-                        params[var].data()[:]=means[var][:]+epsilons[var][:]*sigmas[var][:]
-                    loss=self.non_centered_hierarchical_loss(params,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch)
+                    for (m,s,e,p) in zip(means.values(),stds.values(),epsilons.values(),params.values()):
+                        ss=self.softplus(s)
+                        p.data()[:]=m+e*ss
+                    #for var in means.keys():
+                    #    sigmas[var][:]=self.softplus(stds[var])
+                    #    params[var].data()[:]=means[var][:]+epsilons[var][:]*sigmas[var][:]
+                    loss=self.non_centered_hierarchical_loss(params,means,epsilons,stds,X_train=X_batch,y_train=y_batch)
                 loss.backward()
-                lr_decay=self.step_size*((30 + j) ** (-0.55))
-                mean_momentum, means = self.step(lr_decay,mean_momentum, means)
-                std_momentum, stds = self.step(lr_decay,std_momentum, stds)
-                #eps_momentum, par = self.step(lr_decay,eps_momentum, par)
+                y_pred=self.model.predict(params,X_batch)
+                accuracy.update(y_batch, y_pred.sample())
+                mean_momentum, means = self.step(mean_momentum, means)
+                std_momentum, stds = self.step(std_momentum, stds)
                 j = j+1 
-                cumulative_loss += nd.mean(loss).asscalar()
-            loss_val[i]=cumulative_loss/n_examples
+                cumulative_loss.append(loss)
+            loss_val[i]=np.sum(cumulative_loss)/n_examples
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
-            if verbose and (i%(epochs/10)==0):
-                print('loss: {0:.4f}'.format(loss_val[i]))
+            if verbose:
+                _,train_accuracy=accuracy.get()
+                print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
+        for var in means.keys():
+            params[var].grad_req='write'
         return params,loss_val
