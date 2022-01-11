@@ -18,8 +18,9 @@ import matplotlib.pyplot as plt
 
 import mxnet as mx
 from hamiltonian.inference.sgd import sgd
-from hamiltonian.inference.sgd import sgd
-from hamiltonian.models.softmax import pretrained_model, pretrained_models
+from hamiltonian.inference.sgld import sgld
+from hamiltonian.models.softmax import pretrained_model
+from hamiltonian.utils.utils import plot_loss
 
 from sklearn.metrics import classification_report
 import h5py 
@@ -69,6 +70,28 @@ else:
     par={var:posterior_samples[var][:] for var in posterior_samples.keys()}
     loss=posterior_samples.attrs['loss'][:]
     posterior_samples.close()
+
+plot_loss(loss,'SGD Resnet Plant Village','sgd_resnet_plant_village.pdf')
+total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data_loader)
+y_hat=np.quantile(total_samples,.5,axis=0)
+print(classification_report(np.int32(total_labels),np.int32(y_hat)))
+
+print('#######################################')
+print('Stochastic Gradient Langevin Dynamics')
+inference=sgld(model,step_size=0.001,ctx=model_ctx)
+
+train_sgld=True
+num_epochs=30
+
+if train_sgld:
+    posterior_samples,loss=inference.sample(epochs=num_epochs,batch_size=batch_size,
+                                data_loader=train_data,
+                                verbose=True,chain_name='resnet_plant_posterior.h5')
+else:
+    posterior_samples=h5py.File('resnet_plant_posterior.h5','r')
+    loss=posterior_samples.attrs['loss'][:]
+
+plot_loss(loss,'SGLD Resnet Plant Village','sgld_resnet_plant_village.pdf')
 
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data_loader)
 y_hat=np.quantile(total_samples,.5,axis=0)
