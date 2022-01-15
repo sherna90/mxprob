@@ -44,7 +44,7 @@ class sgld(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 momentum,params=self.step(momentum,params)
                 y_pred=self.model.predict(params,X_batch)
@@ -65,10 +65,10 @@ class sgld(base):
         for var,par in zip(params,params.values()):
             try:
                 grad=par.grad()
-                momentum[var] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
-                #momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
-                par.data()[:]=par.data()-self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]
-                #par.data()[:]=par.data()-momentum[var] 
+                #momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
+                #par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]
+                par.data()[:]=par.data()-momentum[var]+normal[var]
             except:
                 None
         return momentum, params

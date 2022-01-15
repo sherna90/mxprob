@@ -1,3 +1,4 @@
+from tkinter import N
 import mxnet.numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
@@ -65,9 +66,14 @@ class base:
         _, acc = accuracy.get()
         return samples.asnumpy(),labels.asnumpy(),loss_values, acc
 
-    def loss(self,par,X_train,y_train):
-        batch_size=X_train.shape[0]
-        return self.model.loss(par,X_train=X_train,y_train=y_train)*1./batch_size
+    def loss(self,par,**args):
+        try:
+            n_data=args['n_data']
+        except:
+            n_data=1.
+        log_like=self.model.negative_log_likelihood(par,**args)
+        log_prior=self.model.negative_log_prior(par,**args)
+        return log_like+log_prior/n_data
     
     def centered_hierarchical_loss(self,par,means,epsilons,stds,**args):
         log_like=self.model.negative_log_likelihood(par,**args)

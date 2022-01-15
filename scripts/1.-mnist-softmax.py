@@ -76,11 +76,11 @@ total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
-""" print('#######################################')
+print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
-inference=sgld(model,par,step_size=0.001,ctx=model_ctx)
+inference=sgld(model,step_size=0.001,ctx=model_ctx)
 
-train_sgld=True
+train_sgld=False
 num_epochs=100
 
 if train_sgld:
@@ -92,7 +92,7 @@ posterior_samples=h5py.File('posterior_softmax.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
-
+""" 
 loss=posterior_samples.attrs['loss'][:]
 plot_loss(loss,'SGLD Softmax','sgld_nonhierarchical_softmax.pdf')
 

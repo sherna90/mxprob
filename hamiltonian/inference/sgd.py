@@ -82,7 +82,7 @@ class sgd(base):
         params=self.model.net.collect_params()
         for var,theta in zip(params,params.values()):
             if var in par:
-                theta.data()[:]=par[var]
+                theta.data()[:]=mx.numpy.array(par[var]).copyto(self.ctx)
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
