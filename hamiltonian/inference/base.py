@@ -1,4 +1,3 @@
-from tkinter import N
 import mxnet.numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon

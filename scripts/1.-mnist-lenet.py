@@ -58,7 +58,7 @@ model=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=sgd(model,step_size=0.1,ctx=model_ctx)
 
 train_sgd=False
-num_epochs=100
+num_epochs=10
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,chain_name='lenet_map.h5',verbose=True)
@@ -73,10 +73,10 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
-inference=sgld(model,step_size=1e-5,ctx=model_ctx)
+inference=sgld(model,step_size=1e-3,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=100
+num_epochs=10
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,

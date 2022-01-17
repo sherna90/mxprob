@@ -38,6 +38,9 @@ class sgld(base):
         else:
             val_data_loader=None
         accuracy=Accuracy()
+        schedule = mx.lr_scheduler.FactorScheduler(step=250, factor=0.5)
+        schedule.base_lr = self.step_size
+        iteration_idx=1
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
@@ -46,7 +49,9 @@ class sgld(base):
                 with autograd.record():
                     loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                momentum,params=self.step(momentum,params)
+                self.step_size = schedule(iteration_idx)
+                iteration_idx += 1
+                momentum,params=self.step(momentum,params,n_data=n_examples)
                 y_pred=self.model.predict(params,X_batch)
                 accuracy.update(y_batch, y_pred.sample())
                 cumulative_loss.append(loss)
@@ -60,7 +65,7 @@ class sgld(base):
                 print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
         return params,loss_val
     
-    def step(self,momentum,params):
+    def step(self,momentum,params,n_data=1.):
         normal=self.draw_momentum(params,self.step_size)
         for var,par in zip(params,params.values()):
             try:
@@ -68,7 +73,7 @@ class sgld(base):
                 #momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
                 momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
                 #par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]
-                par.data()[:]=par.data()-momentum[var]+normal[var]
+                par.data()[:]=par.data()-momentum[var]+normal[var]/n_data
             except:
                 None
         return momentum, params
