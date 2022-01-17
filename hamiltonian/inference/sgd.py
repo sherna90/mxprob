@@ -41,7 +41,7 @@ class sgd(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 momentum,params=self.step(momentum,params)
                 y_pred=self.model.predict(params,X_batch)
