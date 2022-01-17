@@ -75,14 +75,22 @@ class base:
         return log_like+log_prior/n_data
     
     def centered_hierarchical_loss(self,par,means,epsilons,stds,**args):
+        try:
+            n_data=args['n_data']
+        except:
+            n_data=1.
         log_like=self.model.negative_log_likelihood(par,**args)
         log_prior=self.model.negative_log_prior_centered(par,means,epsilons,stds,**args)
-        return log_like+log_prior
+        return log_like+log_prior/n_data
 
     def non_centered_hierarchical_loss(self,par,means,epsilons,stds,**args):
+        try:
+            n_data=args['n_data']
+        except:
+            n_data=1.
         log_like=self.model.negative_log_likelihood(par,**args)
         log_prior=self.model.negative_log_prior_non_centered(par,means,epsilons,stds,**args)
-        return log_like+log_prior
+        return log_like+log_prior/n_data
 
     def variational_loss(self,par,means,epsilons,sigmas,n_data,batch_size,**args):
         num_batches=n_data/batch_size
