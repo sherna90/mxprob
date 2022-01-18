@@ -61,7 +61,7 @@ class softmax():
             elif k=='y_train':
                 y=v
         y_hat = self.forward(par,X_train=X)
-        return -np.mean(y_hat.log_prob(y))
+        return -np.sum(y_hat.log_prob(y))
         
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)

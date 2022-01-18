@@ -183,33 +183,30 @@ class hierarchical_sgld(sgld):
         means_prior=mxp.Normal(loc=0.,scale=1.0)
         eps_prior=mxp.Normal(loc=0.,scale=1.0)
         
-        mean_momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys() if params[var].grad_req=='write'} #single_chain={var:list() for var in par.keys()}
-        std_momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys() if params[var].grad_req=='write'} #single_chain={var:list() for var in par.keys()}
+        mean_momentum={var:nd.numpy.zeros_like(params[var].data()).copyto(self.ctx) for var in params.keys()} #single_chain={var:list() for var in par.keys()}
+        std_momentum={var:nd.numpy.zeros_like(params[var].data()).copyto(self.ctx) for var in params.keys() } #single_chain={var:list() for var in par.keys()}
         
-        stds={var:scale_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys() if params[var].grad_req=='write'}
-        means={var:means_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys() if params[var].grad_req=='write'}
+        stds={var:scale_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys() }
+        means={var:params[var].data() for var in params.keys() }
         for (m,s,p) in zip(means.values(),stds.values(),params.values()):
             m.attach_grad()
             s.attach_grad()
             p.grad_req='null'
         accuracy=Accuracy()
+        data_loader,n_examples=self._get_loader(**args)
         for i in range(epochs):
-            data_loader,n_examples=self._get_loader(**args)
             cumulative_loss=list()
             j=0
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 epsilons={var:eps_prior.sample(params[var].shape).copyto(self.ctx) for var in params.keys()}            
-                #sigmas={var:nd.numpy.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
+                sigmas={var:nd.numpy.zeros_like(means[var],ctx=self.ctx) for var in means.keys()}
                 with autograd.record():
-                    for (m,s,e,p) in zip(means.values(),stds.values(),epsilons.values(),params.values()):
-                        ss=self.softplus(s)
-                        p.data()[:]=m+e*ss
-                    #for var in means.keys():
-                    #    sigmas[var][:]=self.softplus(stds[var])
-                    #    params[var].data()[:]=means[var][:]+epsilons[var][:]*sigmas[var][:]
-                    loss=self.non_centered_hierarchical_loss(params,means,epsilons,stds,X_train=X_batch,y_train=y_batch)
+                    for var in means.keys():
+                        sigmas[var][:]=self.softplus(stds[var])
+                        params[var].data()[:]=means[var][:]+epsilons[var][:]*sigmas[var][:]
+                    loss=self.centered_hierarchical_loss(params,means,epsilons,sigmas,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                 loss.backward()
                 y_pred=self.model.predict(params,X_batch)
                 accuracy.update(y_batch, y_pred.sample())
@@ -224,6 +221,70 @@ class hierarchical_sgld(sgld):
             if verbose:
                 _,train_accuracy=accuracy.get()
                 print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
-        for var in means.keys():
-            params[var].grad_req='write'
+        return params,loss_val
+
+class distillation_sgld(sgld):
+    
+    def softplus(self,x):
+        return nd.np.log(1. + nd.np.exp(x))
+        #return nd.exp(x)
+
+    def fit(self,epochs=1,batch_size=1,**args):
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
+        if 'chain' in args:
+            chain=args['chain']
+        else:
+            chain=None
+        if 'dataset' in args:
+            dataset=args['dataset']
+        else:
+            dataset=None
+        if 'teacher' in args:
+            teacher=args['teacher']
+        else:
+            teacher=None
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        params=self.model.net.collect_params()
+        momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()} #single_chain={var:list() for var in par.keys()}
+        j=0
+        data_loader,n_examples=self._get_loader(**args)
+        if 'valid_data_loader' in args:
+            val_data_loader=args['valid_data_loader']
+        else:
+            val_data_loader=None
+        accuracy=Accuracy()
+        schedule = mx.lr_scheduler.FactorScheduler(step=250, factor=0.5)
+        schedule.base_lr = self.step_size
+        distillation_loss = mx.gluon.loss.KLDivLoss(from_logits=False)
+        iteration_idx=1
+        for i in range(epochs):
+            cumulative_loss=list()
+            for X_batch, y_batch in data_loader:
+                X_batch=X_batch.as_in_context(self.ctx)
+                y_batch=y_batch.as_in_context(self.ctx)
+                teacher_predictions = teacher.forward(params,X_train=X_batch)
+                with autograd.record():
+                    student_loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
+                    student_predictions = self.model.forward(params,X_train=X_batch)
+                    teacher_loss = distillation_loss(teacher_predictions.prob,student_predictions.prob).sum()
+                    loss = student_loss + teacher_loss
+                loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
+                self.step_size = schedule(iteration_idx)
+                iteration_idx += 1
+                momentum,params=self.step(momentum,params,n_data=n_examples)
+                y_pred=self.model.predict(params,X_batch)
+                accuracy.update(y_batch, y_pred.sample())
+                cumulative_loss.append(loss)
+                j=j+1
+            loss_val[i]=np.sum(cumulative_loss)/n_examples
+            if dataset:
+                for var in params.keys():
+                    dataset[var][chain,i,:]=params[var].data().asnumpy()
+            if verbose:
+                _,train_accuracy=accuracy.get()
+                print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
         return params,loss_val

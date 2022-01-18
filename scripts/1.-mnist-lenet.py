@@ -55,16 +55,18 @@ out_units=10
 print('#######################################')
 print('Stochastic Gradient Descent')
 model=lenet(hyper,in_units,out_units,ctx=model_ctx)
-inference=sgd(model,step_size=0.1,ctx=model_ctx)
+inference=sgd(model,step_size=0.001,ctx=model_ctx)
 
 train_sgd=False
-num_epochs=10
+num_epochs=50
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,chain_name='lenet_map.h5',verbose=True)
 else:
     map_estimate=h5py.File('lenet_map.h5','r')
     par={var:map_estimate[var][:] for var in map_estimate.keys()}
+    params=model.net.collect_params()
+    [params[var].set_data(map_estimate[var][:]) for var in model.keys()]
     map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
@@ -76,7 +78,7 @@ print('Stochastic Gradient Langevin Dynamics')
 inference=sgld(model,step_size=1e-3,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=10
+num_epochs=50
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
