@@ -21,7 +21,7 @@ import mxnet as mx
 from hamiltonian.inference.sgd import sgd
 from hamiltonian.models.softmax import softmax,lenet
 from hamiltonian.inference.sgld import sgld
-from hamiltonian.inference.sgld import hierarchical_sgld
+from hamiltonian.inference.sgld import hierarchical_sgld,distillation_sgld
 from hamiltonian.utils.psis import *
 from hamiltonian.utils.utils import *
 
@@ -66,7 +66,7 @@ else:
     map_estimate=h5py.File('lenet_map.h5','r')
     par={var:map_estimate[var][:] for var in map_estimate.keys()}
     params=model.net.collect_params()
-    [params[var].set_data(map_estimate[var][:]) for var in model.keys()]
+    [params[var].set_data(map_estimate[var][:]) for var in params.keys()]
     map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
@@ -75,15 +75,17 @@ print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
-inference=sgld(model,step_size=1e-3,ctx=model_ctx)
+student=lenet(hyper,in_units,out_units,ctx=model_ctx)
+inference=distillation_sgld(student,step_size=1e-2,ctx=model_ctx)
 
 train_sgld=True
-num_epochs=50
+num_epochs=100
 
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
-                                verbose=True,chain_name='lenet_posterior.h5')
+                                verbose=True,chain_name='lenet_posterior.h5',
+                                teacher=model)
 
 posterior_samples=h5py.File('lenet_posterior.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)

@@ -70,10 +70,8 @@ class sgld(base):
         for var,par in zip(params,params.values()):
             try:
                 grad=par.grad()
-                #momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
-                momentum[var] = self.gamma*momentum[var]+ self.step_size * grad #calcula para parametros peso y bias
-                #par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]
-                par.data()[:]=par.data()-momentum[var]+normal[var]/n_data
+                momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]*1./n_data
             except:
                 None
         return momentum, params
@@ -225,10 +223,6 @@ class hierarchical_sgld(sgld):
 
 class distillation_sgld(sgld):
     
-    def softplus(self,x):
-        return nd.np.log(1. + nd.np.exp(x))
-        #return nd.exp(x)
-
     def fit(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:
             verbose=args['verbose']
@@ -271,7 +265,8 @@ class distillation_sgld(sgld):
                     student_loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                     student_predictions = self.model.forward(params,X_train=X_batch)
                     teacher_loss = distillation_loss(teacher_predictions.prob,student_predictions.prob).sum()
-                    loss = student_loss + teacher_loss
+                    #loss = self.gamma*student_loss + (1.-self.gamma)*teacher_loss
+                    loss=student_loss
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
                 iteration_idx += 1
