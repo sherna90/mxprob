@@ -141,3 +141,4 @@ benchmarks/results/*
 scripts/*.pdf
 scripts/*.h5
 
+*.pdf

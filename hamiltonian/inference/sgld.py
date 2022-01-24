@@ -265,8 +265,7 @@ class distillation_sgld(sgld):
                     student_loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                     student_predictions = self.model.forward(params,X_train=X_batch)
                     teacher_loss = distillation_loss(teacher_predictions.prob,student_predictions.prob).sum()
-                    #loss = self.gamma*student_loss + (1.-self.gamma)*teacher_loss
-                    loss=student_loss
+                    loss = self.gamma*student_loss + (1.-self.gamma)*teacher_loss
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
                 iteration_idx += 1
