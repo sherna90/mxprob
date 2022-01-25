@@ -255,25 +255,26 @@ class distillation_sgld(sgld):
         schedule.base_lr = self.step_size
         distillation_loss = mx.gluon.loss.KLDivLoss(from_logits=False)
         iteration_idx=1
+        teacher.net.setattr('grad_req', 'null')
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
-                teacher_predictions = teacher.forward(params,X_train=X_batch)
                 with autograd.record():
                     student_loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                     student_predictions = self.model.forward(params,X_train=X_batch)
-                    teacher_loss = distillation_loss(teacher_predictions.prob,student_predictions.prob).sum()
+                    with autograd.predict_mode():
+                        teacher_predictions = teacher.forward(teacher.net.collect_params(),X_train=X_batch.as_in_context(teacher.ctx))
+                    teacher_loss = distillation_loss(teacher_predictions.prob.as_in_context(self.ctx),student_predictions.prob).sum()
                     loss = self.gamma*student_loss + (1.-self.gamma)*teacher_loss
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
                 iteration_idx += 1
                 momentum,params=self.step(momentum,params,n_data=n_examples)
-                y_pred=self.model.predict(params,X_batch)
-                accuracy.update(y_batch, y_pred.sample())
+                accuracy.update(y_batch, student_predictions.sample())
                 cumulative_loss.append(loss)
-                j=j+1
+                j=j+10
             loss_val[i]=np.sum(cumulative_loss)/n_examples
             if dataset:
                 for var in params.keys():

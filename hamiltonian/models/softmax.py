@@ -109,7 +109,7 @@ class pretrained_model(softmax):
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
         net(data.as_in_context(self.ctx))
-        net.hybridize()
+        net.hybridize(static_alloc=True, static_shape=True)
         return net
 
     def reset(self,net,sigma=0.01,init=True):
