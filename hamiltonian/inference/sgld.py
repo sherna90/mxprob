@@ -240,6 +240,10 @@ class distillation_sgld(sgld):
             teacher=args['teacher']
         else:
             teacher=None
+        if 'alpha' in args:
+            alpha=args['alpha']
+        else:
+            alpha=0.1
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         params=self.model.net.collect_params()
@@ -260,13 +264,12 @@ class distillation_sgld(sgld):
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
-                teacher_predictions = teacher.forward(params,X_train=X_batch)
+                teacher_predictions = teacher.forward(teacher.net.collect_params(),X_train=X_batch)
                 with autograd.record():
-                    student_loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
+                    student_loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples*batch_size)
                     student_predictions = self.model.forward(params,X_train=X_batch)
                     teacher_loss = distillation_loss(teacher_predictions.prob,student_predictions.prob).sum()
-                    #loss = self.gamma*student_loss + (1.-self.gamma)*teacher_loss
-                    loss=student_loss
+                    loss = alpha*student_loss + (1.-alpha)*teacher_loss
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
                 iteration_idx += 1

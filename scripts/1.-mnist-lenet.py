@@ -84,10 +84,10 @@ num_epochs=100
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
-                                verbose=True,chain_name='lenet_posterior.h5',
+                                verbose=True,chain_name='lenet_posterior_ditillation.h5',
                                 teacher=model)
 
-posterior_samples=h5py.File('lenet_posterior.h5','r')
+posterior_samples=h5py.File('lenet_posterior_ditillation.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
