@@ -1,7 +1,6 @@
 import mxnet.numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
-from tqdm import tqdm, trange
 from copy import deepcopy
 import mxnet.gluon.probability as mxp
 from mxnet.gluon.metric import Accuracy

@@ -78,7 +78,7 @@ print('Stochastic Gradient Langevin Dynamics')
 student=lenet(hyper,in_units,out_units,ctx=model_ctx)
 inference=distillation_sgld(student,step_size=1e-2,ctx=model_ctx)
 
-train_sgld=True
+train_sgld=False
 num_epochs=100
 
 if train_sgld:
@@ -92,11 +92,11 @@ total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loa
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
-'''
+
 samples={var:posterior_samples[var] for var in posterior_samples.keys()}
-samples={var:np.swapaxes(samples[var],0,1) for var in model.par}
+samples={var:np.swapaxes(samples[var],0,1) for var in posterior_samples.keys()}
 r_hat_estimate = lambda samples : tfp.mcmc.diagnostic.potential_scale_reduction(samples, independent_chain_ndims=1,split_chains=False).numpy()
-rhat = {var:r_hat_estimate(samples[var]) for var in model.par}
+rhat = {var:r_hat_estimate(samples[var]) for var in posterior_samples.keys()}
 
 labels, data = rhat.keys(), rhat.values()
 flatten_data=list()
@@ -108,17 +108,17 @@ sns.set_style("whitegrid")
 plt.boxplot(flatten_data)
 plt.xticks(range(1, len(labels) + 1), labels)
 plt.title('Rhat')
-plt.savefig('rhat_nonhierarchical_lenet.pdf', bbox_inches='tight')
+plt.savefig('rhat_distilled_lenet.pdf', bbox_inches='tight')
 
 median_rhat_flat={var:np.median(rhat[var]) for var in rhat}
 
-print('Rhat Non-Hierarchical Model',median_rhat_flat)
+print('Rhat Distilled Lenet',median_rhat_flat)
 
 ess_estimate = lambda samples : tfp.mcmc.diagnostic.effective_sample_size(samples, filter_beyond_positive_pairs=False,cross_chain_dims=1).numpy()
-ess = {var:ess_estimate(samples[var]) for var in model.par}
+ess = {var:ess_estimate(samples[var]) for var in posterior_samples.keys()}
 
 median_ess_flat={var:np.median(ess[var]) for var in ess}
-print('ESS Non-Hierarchical Model',median_ess_flat)
+print('ESS Distilled Lenet',median_ess_flat)
 
 labels, data = ess.keys(), ess.values()
 flatten_data=list()
@@ -129,7 +129,7 @@ sns.set_style("whitegrid")
 plt.boxplot(flatten_data)
 plt.xticks(range(1, len(labels) + 1), labels)
 plt.title('ESS')
-plt.savefig('ess_nonhierarchical_lenet.pdf', bbox_inches='tight')
+plt.savefig('ess_distilled_lenet.pdf', bbox_inches='tight')
 
 loo,loos,ks=psisloo(log_like)
 #max_ks=max(ks[~ np.isinf(ks)])
@@ -144,7 +144,7 @@ print('#######################################')
 print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
 
-inference=hierarchical_sgld(model,par,step_size=0.001,ctx=model_ctx)
+inference=sgld(model,step_size=0.001,ctx=model_ctx)
 
 train_sgld=True
 num_epochs=100
@@ -152,24 +152,24 @@ num_epochs=100
 if train_sgld:
     loss,posterior_samples=inference.sample(epochs=num_epochs,batch_size=batch_size,
                                 data_loader=train_data,
-                                verbose=True,chain_name='hierarchical_lenet_posterior.h5')
+                                verbose=True,chain_name='lenet_posterior.h5')
 
 
 
-posterior_samples=h5py.File('hierarchical_lenet_posterior.h5','r')
+posterior_samples=h5py.File('lenet_posterior.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
 samples={var:posterior_samples[var] for var in posterior_samples.keys()}
-samples={var:np.swapaxes(samples[var],0,1) for var in model.par}
+samples={var:np.swapaxes(samples[var],0,1) for var in posterior_samples.keys()}
 r_hat_estimate = lambda samples : tfp.mcmc.diagnostic.potential_scale_reduction(samples, independent_chain_ndims=1,split_chains=False).numpy()
-rhat = {var:r_hat_estimate(samples[var]) for var in model.par}
+rhat = {var:r_hat_estimate(samples[var]) for var in posterior_samples.keys()}
 
 median_rhat_hierarchical={var:np.median(rhat[var]) for var in rhat}
 median_rhat_hierarchical
 
-print('Rhat Hierarchical Model',median_rhat_hierarchical)
+print('Rhat Lenet',median_rhat_hierarchical)
 
 labels, data = rhat.keys(), rhat.values()
 flatten_data=list()
@@ -181,14 +181,14 @@ sns.set_style("whitegrid")
 plt.boxplot(flatten_data)
 plt.xticks(range(1, len(labels) + 1), labels)
 plt.title('Rhat')
-plt.savefig('rhar_hierarchical_lenet.pdf', bbox_inches='tight')
+plt.savefig('rhar_lenet.pdf', bbox_inches='tight')
 
 
 ess_estimate = lambda samples : tfp.mcmc.diagnostic.effective_sample_size(samples, filter_beyond_positive_pairs=False,cross_chain_dims=1).numpy()
-ess = {var:ess_estimate(samples[var]) for var in model.par}
+ess = {var:ess_estimate(samples[var]) for var in posterior_samples.keys()}
 median_ess_hierarchical={var:np.median(ess[var]) for var in ess}
 
-print('ESS Hierarchical Model',median_ess_hierarchical)
+print('ESS Lenet',median_ess_hierarchical)
 
 labels, data = ess.keys(), ess.values()
 flatten_data=list()
@@ -200,7 +200,7 @@ sns.set_style("whitegrid")
 plt.boxplot(flatten_data)
 plt.xticks(range(1, len(labels) + 1), labels)
 plt.title('ESS')
-plt.savefig('ess_hierarchical_lenet.pdf', bbox_inches='tight')
+plt.savefig('ess_lenet.pdf', bbox_inches='tight')
 
 
 loo,loos,ks=psisloo(log_like)
@@ -216,8 +216,8 @@ import pandas as pd
 hierarchical=[hierarchical_ks_1,hierarchical_ks_7_1,hierarchical_ks_5_7,hierarchical_ks_5]
 flat=[flat_ks_1,flat_ks_7_1,flat_ks_5_7,flat_ks_5]
 index = ['k>1', '0.7<k<1', '0.5<k<0.7','k<0.5']
-df = pd.DataFrame({'hierarchical': hierarchical,
-                   'non-hierarchical': flat}, index=index)
+df = pd.DataFrame({'sgld': hierarchical,
+                   'distilled_sgld': flat}, index=index)
 ax = df.plot.bar(rot=0)
 plt.title('Pareto K shape')
 plt.savefig('pareto_k_lenet.pdf', bbox_inches='tight')
@@ -226,8 +226,8 @@ import pandas as pd
 hierarchical=median_rhat_hierarchical.values()
 flat=median_rhat_flat.values()
 index = median_rhat_flat.keys()
-df = pd.DataFrame({'hierarchical': hierarchical,
-                   'non-hierarchical': flat}, index=index)
+df = pd.DataFrame({'sgld': hierarchical,
+                   'distilled_sgld': flat}, index=index)
 ax = df.plot.bar(rot=0)
 plt.title('Potential Scale Reduction (Rhat)')
 plt.savefig('potential_scale_lenet.pdf', bbox_inches='tight')
@@ -236,11 +236,10 @@ plt.savefig('potential_scale_lenet.pdf', bbox_inches='tight')
 hierarchical=median_ess_hierarchical.values()
 flat=median_ess_flat.values()
 index = median_ess_flat.keys()
-df = pd.DataFrame({'hierarchical': hierarchical,
-                   'non-hierarchical': flat}, index=index)
+df = pd.DataFrame({'sgld': hierarchical,
+                   'distilled-sgld': flat}, index=index)
 ax = df.plot.bar(rot=0)
 plt.title('ESS') 
 plt.savefig('ess_lenet.pdf', bbox_inches='tight')
 
 
-'''

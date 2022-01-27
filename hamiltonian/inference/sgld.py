@@ -259,6 +259,8 @@ class distillation_sgld(sgld):
         schedule.base_lr = self.step_size
         distillation_loss = mx.gluon.loss.KLDivLoss(from_logits=False)
         iteration_idx=1
+        teacher.net.setattr('grad_req', 'null')
+        teacher.net.cast('float16')
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
@@ -274,10 +276,9 @@ class distillation_sgld(sgld):
                 self.step_size = schedule(iteration_idx)
                 iteration_idx += 1
                 momentum,params=self.step(momentum,params,n_data=n_examples)
-                y_pred=self.model.predict(params,X_batch)
-                accuracy.update(y_batch, y_pred.sample())
+                accuracy.update(y_batch, student_predictions.sample())
                 cumulative_loss.append(loss)
-                j=j+1
+                j=j+10
             loss_val[i]=np.sum(cumulative_loss)/n_examples
             if dataset:
                 for var in params.keys():
