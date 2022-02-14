@@ -26,21 +26,25 @@ class sgld(base):
             dataset=args['dataset']
         else:
             dataset=None
-        epochs=int(epochs)
-        loss_val=np.zeros(epochs)
-        params=self.model.net.collect_params()
-        momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()} #single_chain={var:list() for var in par.keys()}
-        epsilon=self.step_size
-        j=0
-        data_loader,n_examples=self._get_loader(**args)
         if 'valid_data_loader' in args:
             val_data_loader=args['valid_data_loader']
         else:
             val_data_loader=None
-        accuracy=Accuracy()
+        if 'metric' in args:
+            if args['metric']=='rmse':
+                metric=RMSE()
+            elif args['metric']=='accuracy':
+                metric=Accuracy()
+        else:
+            metric=Accuracy()
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        params=self.model.net.collect_params()
+        data_loader,n_examples=self._get_loader(**args)
         schedule = mx.lr_scheduler.FactorScheduler(step=250, factor=0.5)
         schedule.base_lr = self.step_size
         iteration_idx=1
+        trainer = gluon.Trainer(params, 'sgld', {'learning_rate': self.step_size})
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
@@ -50,18 +54,18 @@ class sgld(base):
                     loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
+                trainer.step(batch_size)
                 iteration_idx += 1
-                momentum,params=self.step(momentum,params,n_data=n_examples)
                 y_pred=self.model.predict(params,X_batch)
-                accuracy.update(y_batch, y_pred.sample())
+                metric.update(y_batch, np.mean(y_pred.sample_n(100)))
                 cumulative_loss.append(loss)
                 j=j+1
             loss_val[i]=np.sum(cumulative_loss)/n_examples
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
-            if verbose:
-                _,train_accuracy=accuracy.get()
+            if verbose and i%(epochs//10)==0:
+                _,train_accuracy=metric.get()
                 print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
         return params,loss_val
     

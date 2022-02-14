@@ -2,7 +2,7 @@ import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon
 from mxnet.ndarray import clip
-from mxnet.gluon.metric import Accuracy
+from mxnet.gluon.metric import Accuracy,RMSE
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
@@ -16,8 +16,6 @@ class sgd(base):
             verbose=args['verbose']
         else:
             verbose=None
-        epochs=int(epochs)
-        loss_val=np.zeros(epochs)
         if 'chain_name' in args:
             if os.path.exists(args['chain_name']):
                 os.remove(args['chain_name'])
@@ -26,52 +24,48 @@ class sgd(base):
             if os.path.exists('map_estimate.h5'):
                 os.remove('map_estimate.h5')
             posterior_samples=h5py.File('map_estimate.h5','w')
-        params=self.model.net.collect_params()
-        momentum={var:nd.numpy.zeros_like(params[var].data()) for var in params.keys()}
-        if 'valid_data_loader' in args:
-            val_data_loader=args['valid_data_loader']
+        if 'metric' in args:
+            if args['metric']=='rmse':
+                metric=RMSE()
+            elif args['metric']=='accuracy':
+                metric=Accuracy()
         else:
-            val_data_loader=None
-        data_loader,n_examples=self._get_loader(**args)
+            metric=Accuracy()
+        epochs=int(epochs)
+        loss_val=np.zeros(epochs)
+        params=self.model.net.collect_params()
+        data_loader,n_batches=self._get_loader(**args)
         j=0
-        accuracy=Accuracy()
+        trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                momentum,params=self.step(momentum,params)
+                trainer.step(batch_size)
                 y_pred=self.model.predict(params,X_batch)
-                accuracy.update(y_batch, y_pred.sample())
-                cumulative_loss.append(loss)
-            loss_val[i]=np.sum(cumulative_loss)/n_examples
-            _,train_accuracy=accuracy.get()
-            if verbose:
+                metric.update(y_batch, np.mean(y_pred.sample_n(100),axis=0))
+                cumulative_loss.append(loss.asnumpy())
+            _,train_accuracy=metric.get()
+            loss_val[i]=loss
+            if verbose and i%(epochs//10)==0:
                 print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
         dset=[posterior_samples.create_dataset(var,data=params[var].data().asnumpy()) for var in params.keys()]
         posterior_samples.attrs['epochs']=epochs
         posterior_samples.attrs['loss']=loss_val
         posterior_samples.flush()
         posterior_samples.close()
-        par={var:params[var].data() for var in params.keys()}
-        return par,loss_val
+        return params,loss_val
 
-    def acc(output, label):
-        # output: (batch, num_output) float32 ndarray
-        # label: (batch, ) int32 ndarray
-        return (output.argmax(axis=1) ==label.astype('float32')).mean().asscalar()
 
     def step(self,momentum,params):
         for var,par in zip(params,params.values()):
-            try:
-                grad=par.grad()
-                momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
-                par.data()[:]=par.data()-momentum[var]
-            except:
-                None
+            grad=par.grad()
+            momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
+            par.data()[:]=par.data()- self.step_size * grad
         return momentum,params
 
     def predict(self,par,num_samples=100,**args):

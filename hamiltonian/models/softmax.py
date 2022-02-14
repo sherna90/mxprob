@@ -24,13 +24,7 @@ class softmax():
         return net
 
     def reset(self,net,sigma=0.01,init=True):
-        if init:
-            net.initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
-        else:
-            params=self.net.collect_params()
-            eps={var:random.normal(0,sigma,shape=params[var].shape,ctx=self.ctx,dtype=params[var].dtype) for var in params.keys()}
-            for var,par in zip(params,params.values()):
-                par.data()[:]=par.data()+eps[var]
+        net.initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
         return True
 
     def predict(self,par,X):
