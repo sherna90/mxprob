@@ -92,17 +92,6 @@ class base:
         log_prior=self.model.negative_log_prior_non_centered(par,means,epsilons,stds,**args)
         return log_like+log_prior*1.0/n_data
 
-    def variational_loss(self,par,means,epsilons,sigmas,n_data,batch_size,**args):
-        num_batches=n_data/batch_size
-        log_likelihood_sum=self.model.negative_log_likelihood(par,**args)
-        log_prior_sum=self.model.negative_log_prior_non_centered(par,means,epsilons,sigmas,**args)
-        log_var_posterior=np.zeros(shape=1,ctx=self.ctx)
-        for var in par.keys():
-            l_kl=1.+np.log(np.square(sigmas[var]))
-            l_kl=l_kl-np.square(means[var])
-            l_kl=l_kl-np.square(sigmas[var])
-            log_var_posterior=log_var_posterior-0.5*np.sum(l_kl)
-        return 1.0 / n_data * (log_var_posterior + log_prior_sum) + log_likelihood_sum
     
     def distillation_loss(self,par,teacher_predictions,student_predictions,n_data,**args):
         log_likelihood_sum=self.model.negative_log_likelihood(par,**args)

@@ -2,7 +2,7 @@ from mxnet.ndarray.contrib import isnan
 import numpy as np
 import mxnet as mx
 from mxnet import nd, autograd, gluon,random
-from mxnet.gluon.metric import Accuracy
+from mxnet.gluon.metric import Accuracy,RMSE
 from mxnet.ndarray import clip
 import mxnet.gluon.probability as mxp
 from copy import deepcopy
@@ -40,7 +40,7 @@ class sgld(base):
         epochs=int(epochs)
         loss_val=np.zeros(epochs)
         params=self.model.net.collect_params()
-        data_loader,n_examples=self._get_loader(**args)
+        data_loader,n_batches=self._get_loader(**args)
         schedule = mx.lr_scheduler.FactorScheduler(step=250, factor=0.5)
         schedule.base_lr = self.step_size
         iteration_idx=1
@@ -51,16 +51,15 @@ class sgld(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_examples)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
                 trainer.step(batch_size)
                 iteration_idx += 1
                 y_pred=self.model.predict(params,X_batch)
-                metric.update(y_batch, np.mean(y_pred.sample_n(100)))
-                cumulative_loss.append(loss)
-                j=j+1
-            loss_val[i]=np.sum(cumulative_loss)/n_examples
+                metric.update(y_batch, np.mean(y_pred.sample_n(100),axis=0))
+                cumulative_loss.append(loss.asnumpy())
+            loss_val[i]=np.sum(cumulative_loss)/(n_batches*batch_size)
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
