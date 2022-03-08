@@ -44,28 +44,28 @@ class sgld(base):
         schedule = mx.lr_scheduler.FactorScheduler(step=250, factor=0.5)
         schedule.base_lr = self.step_size
         iteration_idx=1
-        trainer = gluon.Trainer(params, 'sgld', {'learning_rate': self.step_size})
+        momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 self.step_size = schedule(iteration_idx)
-                trainer.step(batch_size)
+                momentum,params=self.step(momentum,params)
                 iteration_idx += 1
                 y_pred=self.model.predict(params,X_batch)
-                metric.update(y_batch, np.mean(y_pred.sample_n(100),axis=0))
+                metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])
                 cumulative_loss.append(loss.asnumpy())
             loss_val[i]=np.sum(cumulative_loss)/(n_batches*batch_size)
             if dataset:
                 for var in params.keys():
                     dataset[var][chain,i,:]=params[var].data().asnumpy()
             if verbose and i%(epochs//10)==0:
-                _,train_accuracy=metric.get()
-                print('iteration {0}, train loss: {1:.4f}, train accuracy : {2:.4f}'.format(i,loss_val[i],train_accuracy))
+                metric_name,train_accuracy=metric.get()
+                print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[i],metric_name,train_accuracy))
         return params,loss_val
     
     def step(self,momentum,params,n_data=1.):
