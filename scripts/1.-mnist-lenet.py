@@ -39,7 +39,7 @@ transform = transforms.Compose([
 num_gpus = 0
 model_ctx = mx.gpu()
 num_workers = 0
-batch_size = 256 
+batch_size = 512 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.MNIST(train=True).transform_first(transform),
     batch_size=batch_size, shuffle=True, last_batch='discard', num_workers=num_workers)
@@ -62,17 +62,17 @@ num_epochs=50
 if train_sgd:
     par,loss=inference.fit(epochs=num_epochs,batch_size=batch_size,
                            data_loader=train_data,chain_name='lenet_map.h5',verbose=True)
-else:
-    map_estimate=h5py.File('lenet_map.h5','r')
-    par={var:map_estimate[var][:] for var in map_estimate.keys()}
-    params=model.net.collect_params()
-    [params[var].set_data(map_estimate[var][:]) for var in params.keys()]
-    map_estimate.close()
+map_estimate=h5py.File('lenet_map.h5','r')
+par={var:map_estimate[var][:] for var in map_estimate.keys()}
+params=model.net.collect_params()
+[params[var].set_data(map_estimate[var][:]) for var in params.keys()]
+map_estimate.close()
 
 total_samples,total_labels,log_like=inference.predict(par,batch_size=batch_size,num_samples=100,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
 
+''''
 print('#######################################')
 print('Stochastic Gradient Langevin Dynamics')
 student=lenet(hyper,in_units,out_units,ctx=model_ctx)
@@ -87,7 +87,7 @@ if train_sgld:
                                 verbose=True,chain_name='lenet_posterior_ditillation.h5',
                                 teacher=model)
 
-posterior_samples=h5py.File('lenet_posterior_ditillation.h5','r')
+posterior_samples=h5py.File('lenet_posterior_distillation.h5','r')
 total_samples,total_labels,log_like=inference.predict(posterior_samples,data_loader=val_data)
 y_hat=np.quantile(total_samples,.5,axis=0)
 print(classification_report(np.int32(total_labels),np.int32(y_hat)))
@@ -139,7 +139,7 @@ flat_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
 flat_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))
 flat_ks_5=np.sum(ks<0.5)
 
-
+'''
 print('#######################################')
 print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
@@ -211,6 +211,7 @@ hierarchical_ks_7_1=np.sum(np.logical_and(ks>0.7,ks<1))
 hierarchical_ks_5_7=np.sum(np.logical_and(ks>0.5,ks<0.7))
 hierarchical_ks_5=np.sum(ks<0.5)
 
+'''
 import pandas as pd
 
 hierarchical=[hierarchical_ks_1,hierarchical_ks_7_1,hierarchical_ks_5_7,hierarchical_ks_5]
@@ -242,4 +243,4 @@ ax = df.plot.bar(rot=0)
 plt.title('ESS') 
 plt.savefig('ess_lenet.pdf', bbox_inches='tight')
 
-
+'''

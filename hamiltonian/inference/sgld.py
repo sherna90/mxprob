@@ -51,9 +51,9 @@ class sgld(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
-                self.step_size = schedule(iteration_idx)
+                #self.step_size = schedule(iteration_idx)
                 momentum,params=self.step(momentum,params)
                 iteration_idx += 1
                 y_pred=self.model.predict(params,X_batch)
@@ -71,12 +71,9 @@ class sgld(base):
     def step(self,momentum,params,n_data=1.):
         normal=self.draw_momentum(params,self.step_size)
         for var,par in zip(params,params.values()):
-            try:
-                grad=par.grad()
-                momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
-                par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]*1./n_data
-            except:
-                None
+            grad=par.grad()
+            momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+            par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]*1./n_data
         return momentum, params
 
     def draw_momentum(self,params,epsilon):
@@ -263,7 +260,6 @@ class distillation_sgld(sgld):
         distillation_loss = mx.gluon.loss.KLDivLoss(from_logits=False)
         iteration_idx=1
         teacher.net.setattr('grad_req', 'null')
-        teacher.net.cast('float16')
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
