@@ -54,7 +54,7 @@ class sgld(base):
                     loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #self.step_size = schedule(iteration_idx)
-                momentum,params=self.step(momentum,params)
+                momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
                 iteration_idx += 1
                 y_pred=self.model.predict(params,X_batch)
                 metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])
