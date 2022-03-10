@@ -60,7 +60,7 @@ class softmax():
     def loss(self,par,**args):
         log_like=self.negative_log_likelihood(par,**args)
         log_prior=self.negative_log_prior(par,**args)
-        return log_like
+        return log_like+log_prior
 
     def negative_log_prior_non_centered(self,par, means,epsilons,stds,**args):
         log_prior=np.zeros(shape=1,ctx=self.ctx)
