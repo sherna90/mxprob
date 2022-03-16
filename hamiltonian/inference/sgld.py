@@ -54,7 +54,7 @@ class sgld(base):
                     loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #self.step_size = schedule(iteration_idx)
-                momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
+                momentum,params=self.step(momentum,params,n_data=n_batches)
                 iteration_idx += 1
                 y_pred=self.model.predict(params,X_batch)
                 metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])
@@ -71,9 +71,12 @@ class sgld(base):
     def step(self,momentum,params,n_data=1.):
         normal=self.draw_momentum(params,self.step_size)
         for var,par in zip(params,params.values()):
-            grad=par.grad()
-            momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
-            par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]*1./n_data
+            try:
+                grad=par.grad()
+                momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)+normal[var]*1./n_data
+            except:
+                None
         return momentum, params
 
     def draw_momentum(self,params,epsilon):

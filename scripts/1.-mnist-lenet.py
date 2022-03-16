@@ -143,8 +143,8 @@ flat_ks_5=np.sum(ks<0.5)
 print('#######################################')
 print('Hierarchical Stochastic Gradient Langevin Dynamics')
 
-
-inference=sgld(model,step_size=0.001,ctx=model_ctx)
+new_model=lenet(hyper,in_units,out_units,ctx=model_ctx)
+inference=sgld(new_model,step_size=0.001,ctx=model_ctx)
 
 train_sgld=True
 num_epochs=100
