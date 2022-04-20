@@ -130,7 +130,7 @@ class lenet(softmax):
         self.reset(net)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
         net(data.as_in_context(self.ctx))
-        net.hybridize()
+        #net.hybridize()
         return net
     
 

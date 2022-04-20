@@ -75,12 +75,16 @@ class base:
     
     def cold_posterior_loss(self,par,**args):
         try:
+            n_data=args['n_data']
+        except:
+            n_data=1.
+        try:
             temp=args['temperature']
         except:
             temp=1.
         log_like=self.model.negative_log_likelihood(par,**args)
         log_prior=self.model.negative_log_prior(par,**args)
-        return (log_like+log_prior)*1.0/temp
+        return (log_like+log_prior*1.0/n_data)*1.0/temp
     
 
     def centered_hierarchical_loss(self,par,means,epsilons,stds,**args):

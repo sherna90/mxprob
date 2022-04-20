@@ -6,6 +6,7 @@ from mxnet.gluon.metric import Accuracy,RMSE
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
+from hamiltonian.inference.sgld import sgld
 import h5py 
 import os 
 
@@ -35,18 +36,19 @@ class sgd(base):
         loss_val=np.zeros(epochs)
         params=self.model.net.collect_params()
         data_loader,n_batches=self._get_loader(**args)
-        j=0
         momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
+        #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
+        inference=sgld(self.model,step_size=0.01,ctx=self.ctx)
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.model.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches)
+                    loss = self.cold_posterior_loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #trainer.step(batch_size)
-                momentum,params=self.step(momentum,params)
+                momentum,params=inference.step(momentum,params,n_data=n_batches)
                 y_pred=self.model.predict(params,X_batch)
                 metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])
                 cumulative_loss.append(loss.asnumpy())
@@ -64,10 +66,13 @@ class sgd(base):
 
     def step(self,momentum,params):
         for var,par in zip(params,params.values()):
-            grad=par.grad()
-            momentum[var] = self.gamma * momentum[var] + self.step_size * grad #calcula para parametros peso y bias
-            par.data()[:]=par.data()- self.step_size * grad
-        return momentum,params
+            try:
+                grad=par.grad()
+                momentum[var][:] = self.gamma*momentum[var]+ self.step_size*grad
+                par.data()[:]=par.data()-momentum[var]
+            except:
+                None
+        return momentum, params
 
     def predict(self,par,num_samples=100,**args):
         data_loader,n_examples=self._get_loader(**args)
