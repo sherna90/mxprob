@@ -6,7 +6,6 @@ from mxnet.gluon.metric import Accuracy,RMSE
 from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
-from hamiltonian.inference.sgld import sgld
 import h5py 
 import os 
 
@@ -38,7 +37,6 @@ class sgd(base):
         data_loader,n_batches=self._get_loader(**args)
         momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
         #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
-        inference=sgld(self.model,step_size=0.01,ctx=self.ctx)
         for i in range(epochs):
             cumulative_loss=list()
             for X_batch, y_batch in data_loader:
@@ -48,7 +46,7 @@ class sgd(base):
                     loss = self.cold_posterior_loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #trainer.step(batch_size)
-                momentum,params=inference.step(momentum,params,n_data=n_batches)
+                momentum,params=self.step(momentum,params,n_data=1.)
                 y_pred=self.model.predict(params,X_batch)
                 metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])
                 cumulative_loss.append(loss.asnumpy())
@@ -70,6 +68,16 @@ class sgd(base):
                 grad=par.grad()
                 momentum[var][:] = self.gamma*momentum[var]+ self.step_size*grad
                 par.data()[:]=par.data()-momentum[var]
+            except:
+                None
+        return momentum, params
+
+    def step(self,momentum,params,n_data=1.):
+        for var,par in zip(params,params.values()):
+            try:
+                grad=par.grad()
+                momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)
             except:
                 None
         return momentum, params
