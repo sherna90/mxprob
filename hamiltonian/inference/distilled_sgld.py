@@ -92,7 +92,7 @@ class distilled_sgld(sgld):
         params=self.student.net.collect_params()
         dset=[posterior_samples.create_dataset(var,shape=(chains,epochs)+params[var].shape,dtype=params[var].dtype) for var in params.keys()]
         for i in range(chains):
-            self.student.reset(self.student.net,sigma=1e-3,init=False)
+            self.student.reset(self.student.net,sigma=1e-3,init=True)
             _,loss=self.fit(epochs=epochs,batch_size=batch_size,
                 chain=i,dataset=posterior_samples,verbose=verbose,**args)
             loss_values.append(loss)

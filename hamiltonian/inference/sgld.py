@@ -114,9 +114,9 @@ class sgld(base):
     def predict(self,posterior_samples,**args):
         data_loader,_=self._get_loader(**args)
         total_samples=list()
+        total_logits=list()
         num_samples=posterior_samples.attrs['num_samples']
         num_chains=posterior_samples.attrs['num_chains']
-        total_loglike=list()
         params=self.model.net.collect_params()
         for i in range(num_chains):
             for j in range(num_samples):
@@ -127,6 +127,7 @@ class sgld(base):
                     if var in par:
                         theta.data()[:]=par[var]
                 samples=list()
+                logits=list()
                 loglike=list()
                 labels=list()
                 for X_test,y_test in data_loader:

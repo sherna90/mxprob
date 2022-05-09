@@ -80,4 +80,24 @@ class distilled_sgd(sgd):
         return params,loss_val
 
 
-    
+    def predict(self,par,num_samples=100,**args):
+        data_loader,n_examples=self._get_loader(**args)
+        total_labels=[]
+        total_samples=[]
+        total_loglike=[]
+        params=self.student.net.collect_params()
+        for var,theta in zip(params,params.values()):
+            if var in par:
+                theta.data()[:]=mx.numpy.array(par[var]).copyto(self.ctx)
+        for X_test,y_test in data_loader:
+            X_test=X_test.as_in_context(self.ctx)
+            y_test=y_test.as_in_context(self.ctx)
+            y_hat=self.student.predict(par,X_test)
+            total_loglike.append(y_hat.log_prob(y_test).asnumpy())
+            samples=y_hat.sample_n(num_samples).asnumpy()
+            total_samples.append(samples)
+            total_labels.append(y_test.asnumpy())
+        total_samples=np.concatenate(total_samples,axis=1)
+        total_labels=np.concatenate(total_labels)
+        total_loglike=np.concatenate(total_loglike)
+        return total_samples,total_labels,total_loglike   
