@@ -77,7 +77,28 @@ class linear_aleatoric(linear):
         y_hat=mxp.normal.Normal(loc=loc,scale=scale)
         return y_hat
 
+class pretrained_model(linear):
+    
+    def __init__(self,model_name,_hyper,in_units=(1,224,224),out_units=10,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.model_name=model_name
+        self.net = self._init_net(in_units,out_units)
+        
+    def _init_net(self,in_units,out_units):
+        data = nd.numpy.ones((1,in_units[0],in_units[1],in_units[2]))
+        net = gluon.nn.HybridSequential()#inicializacion api sequencial
+        model=get_model(self.model_name,pretrained=True,ctx=self.ctx)
+        net.add(model.features)
+        net.add(gluon.nn.Dense(out_units))#capa de salida
+        self.reset(net)
+        net(data.as_in_context(self.ctx))
+        net.hybridize(static_alloc=True, static_shape=True)
+        return net
 
+    def reset(self,net,sigma=0.01,init=True):
+        net[1].initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
+        return True
 
 
 class lstm_linear(linear):

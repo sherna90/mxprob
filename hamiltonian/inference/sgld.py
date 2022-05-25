@@ -114,7 +114,7 @@ class sgld(base):
     def predict(self,posterior_samples,**args):
         data_loader,_=self._get_loader(**args)
         total_samples=list()
-        total_logits=list()
+        total_loglike=list()
         num_samples=posterior_samples.attrs['num_samples']
         num_chains=posterior_samples.attrs['num_chains']
         params=self.model.net.collect_params()
