@@ -1,6 +1,5 @@
-import numpy as np
 import mxnet as mx
-from mxnet import nd, autograd, gluon
+from mxnet import nd,np, autograd, gluon
 from mxnet.ndarray import clip
 from mxnet.gluon.metric import Accuracy,RMSE
 from tqdm import tqdm, trange
@@ -32,28 +31,27 @@ class sgd(base):
         else:
             metric=Accuracy()
         epochs=int(epochs)
-        loss_val=np.zeros(epochs)
+        loss_val=list()
         params=self.model.net.collect_params()
         data_loader,n_batches=self._get_loader(**args)
         momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
         #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
         for i in range(epochs):
-            cumulative_loss=list()
-            for X_batch, y_batch in data_loader:
+            cumulative_loss=0.0
+            for j,(X_batch, y_batch) in enumerate(data_loader):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.cold_posterior_loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
+                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #trainer.step(batch_size)
-                momentum,params=self.step(momentum,params,n_data=1.)
-                y_pred=self.model.predict(params,X_batch)
-                metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])
-                cumulative_loss.append(loss.asnumpy())
+                cumulative_loss+=loss.asnumpy()
+                momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
+            y_pred=self.model.predict(params,X_batch)
+            metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
             metric_name,train_accuracy=metric.get()
-            loss_val[i]=np.sum(cumulative_loss)/(n_batches*batch_size)
-            if verbose and i%(epochs//10)==0:
-                print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[i],metric_name,train_accuracy))
+            loss_val.append(cumulative_loss/(n_batches*batch_size))
+            print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[-1],metric_name,train_accuracy))
         dset=[posterior_samples.create_dataset(var,data=params[var].data().asnumpy()) for var in params.keys()]
         posterior_samples.attrs['epochs']=epochs
         posterior_samples.attrs['loss']=loss_val

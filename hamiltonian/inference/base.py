@@ -71,7 +71,7 @@ class base:
             n_data=1.
         log_like=self.model.negative_log_likelihood(par,**args)
         log_prior=self.model.negative_log_prior(par,**args)
-        return log_like+log_prior*1.0/n_data
+        return log_like#+log_prior*1.0/n_data
     
     def cold_posterior_loss(self,par,**args):
         try:

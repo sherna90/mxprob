@@ -5,6 +5,7 @@ import mxnet as mx
 from mxnet import np
 from mxnet import nd, autograd, gluon
 import mxnet.gluon.probability as mxp
+from mxnet.gluon.model_zoo.vision import get_model
 
 class linear():
     
@@ -30,7 +31,7 @@ class linear():
             if k=='X_train':
                 X=v
         y_linear = self.net.forward(X)
-        y_hat=mxp.normal.Normal(loc=y_linear,scale=np.sqrt(self.hyper['scale']))
+        y_hat=mxp.normal.Normal(loc=y_linear,scale=self.hyper['scale'])
         return y_hat
     
     def reset(self,net,sigma=0.01,init=True):
@@ -90,6 +91,9 @@ class pretrained_model(linear):
         net = gluon.nn.HybridSequential()#inicializacion api sequencial
         model=get_model(self.model_name,pretrained=True,ctx=self.ctx)
         net.add(model.features)
+        net.add(gluon.nn.Dense(128))#capa de salida
+        net.add(gluon.nn.Dense(64))#capa de salida
+        net.add(gluon.nn.Dense(32))#capa de salida
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
         net(data.as_in_context(self.ctx))
@@ -97,9 +101,67 @@ class pretrained_model(linear):
         return net
 
     def reset(self,net,sigma=0.01,init=True):
-        net[1].initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
+        net[1:].initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
         return True
 
+class pretrained_model_aleatoric(linear_aleatoric):
+    
+    def __init__(self,model_name,_hyper,in_units=(1,224,224),out_units=10,ctx=mx.cpu()):
+        self.hyper=_hyper
+        self.ctx=ctx
+        self.model_name=model_name
+        self.in_units=in_units
+        self.out_units=out_units
+        self.net = self._init_net(in_units,out_units)
+        
+    def _init_net(self,in_units,out_units):
+        data = nd.numpy.ones((1,in_units[0],in_units[1],in_units[2]))
+        net = gluon.nn.HybridSequential()#inicializacion api sequencial
+        model=get_model(self.model_name,pretrained=True,ctx=self.ctx)
+        net.add(model.features)
+        net.add(gluon.nn.Dense(128))#capa de salida
+        net.add(gluon.nn.Dense(64))#capa de salida
+        net.add(gluon.nn.Dense(32))#capa de salida
+        net.add(gluon.nn.Dense(2*out_units))#capa de salida
+        self.reset(net)
+        net(data.as_in_context(self.ctx))
+        net.hybridize(static_alloc=True, static_shape=True)
+        return net
+
+    def reset(self,net,sigma=0.01,init=True):
+        net[1:].initialize(init=mx.init.Normal(sigma=sigma), ctx=self.ctx, force_reinit=init)
+        return True
+
+class pretrained_model_beta(pretrained_model_aleatoric):
+    
+    def negative_log_likelihood(self,par,**args):
+        for k,v in args.items():
+            if k=='X_train':
+                X=v
+            elif k=='y_train':
+                y=v
+        y_hat = self.forward(par,X_train=X)
+        y_pos=np.where(y>0,y,1e-3)
+        #print('positive constraint y : {0}'.format(np.all(y_pos>0)))
+        return -np.sum(y_hat.log_prob(y_pos))
+
+    def forward(self,par, **args):
+        softplus = lambda x : np.log(1. + np.exp(x))
+        for k,v in args.items():
+            if k=='X_train':
+                X=v
+        y_linear = self.net.forward(X)
+        y_linear=mx.npx.leaky_relu(y_linear,act_type='leaky',slope=-0.05)
+        #alpha=1e-3 + softplus(0.05 * y_linear[...,self.out_units:])
+        #beta=1e-3 + softplus(0.05 *y_linear[..., :self.out_units])
+        alpha=y_linear[...,self.out_units:]
+        beta=y_linear[..., :self.out_units]
+        alpha=np.where(alpha>0,alpha,1e-3)
+        beta=np.where(beta>0,beta,1e-3)
+        #print('positive constraint alpha : {0}, beta : {1}'.format(np.all(alpha>0),np.all(beta>0)))
+        #print('max constraint alpha : {0}, beta : {1}'.format(np.all(alpha<2),np.all(beta<2)))
+        y_hat=mxp.beta.Beta(alpha=alpha,beta=beta)
+        return y_hat
 
 class lstm_linear(linear):
     
