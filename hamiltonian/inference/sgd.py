@@ -86,9 +86,9 @@ class sgd(base):
         total_samples=[]
         total_loglike=[]
         params=self.model.net.collect_params()
-        for var,theta in zip(params,params.values()):
+        for var in params:
             if var in par:
-                theta.data()[:]=mx.numpy.array(par[var]).copyto(self.ctx)
+                params[var].data()[:]=mx.numpy.array(par[var]).copyto(self.ctx)
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
