@@ -59,13 +59,13 @@ class sgd(base):
         posterior_samples.close()
         return params,loss_val
 
-def allreduce(data):
-    for i in range(1, len(data)):
-        data[0][:] += data[i].copyto(data[0].ctx)
-    for i in range(1, len(data)):
-        data[0].copyto(data[i])
+    def allreduce(data):
+        for i in range(1, len(data)):
+            data[0][:] += data[i].copyto(data[0].ctx)
+        for i in range(1, len(data)):
+            data[0].copyto(data[i])
 
-def fit_multi_gpu(self,epochs=1,batch_size=1,**args):
+    def fit_multi_gpu(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -89,7 +89,7 @@ def fit_multi_gpu(self,epochs=1,batch_size=1,**args):
         loss_val=list()
         params=self.model.net.collect_params()
         data_loader,n_batches=self._get_loader(**args)
-        momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
+        momentum=[{var:mx.np.zeros_like(params[var].data()) for var in params.keys()} ]
         #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
         for i in range(epochs):
             cumulative_loss=0.0
