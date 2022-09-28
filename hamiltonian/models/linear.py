@@ -42,7 +42,8 @@ class linear():
         param_prior=mxp.normal.Normal(loc=0.,scale=np.sqrt(self.hyper['alpha']))
         log_prior=list()
         for var in par.keys():
-            log_prior.append(np.sum(param_prior.log_prob(par[var].data())))
+            for p in par[var].list_data():
+                log_prior.append(np.sum(param_prior.log_prob(p)))
         return -np.sum(np.stack(log_prior))
        
     def negative_log_likelihood(self,par,**args):
