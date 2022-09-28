@@ -39,11 +39,15 @@ class linear():
         return True
 
     def negative_log_prior(self, par,**args):
+        for k,v in args.items():
+            if k=='X_train':
+                X=v
         param_prior=mxp.normal.Normal(loc=0.,scale=np.sqrt(self.hyper['alpha']))
         log_prior=list()
         for var in par.keys():
             for p in par[var].list_data():
-                log_prior.append(np.sum(param_prior.log_prob(p)))
+                if p.ctx==X.ctx:
+                    log_prior.append(np.sum(param_prior.log_prob(p)))
         return -np.sum(np.stack(log_prior))
        
     def negative_log_likelihood(self,par,**args):
