@@ -2,6 +2,7 @@ import mxnet as mx
 from mxnet import nd,np, autograd, gluon
 from mxnet.ndarray import clip
 from mxnet.gluon.metric import Accuracy,RMSE
+from mxnet.gluon.utils import split_and_load
 from copy import deepcopy
 from hamiltonian.inference.base import base
 import h5py 
@@ -58,6 +59,63 @@ class sgd(base):
         posterior_samples.close()
         return params,loss_val
 
+def allreduce(data):
+    for i in range(1, len(data)):
+        data[0][:] += data[i].copyto(data[0].ctx)
+    for i in range(1, len(data)):
+        data[0].copyto(data[i])
+
+def fit_multi_gpu(self,epochs=1,batch_size=1,**args):
+        if 'verbose' in args:
+            verbose=args['verbose']
+        else:
+            verbose=None
+        if 'chain_name' in args:
+            if os.path.exists(args['chain_name']):
+                os.remove(args['chain_name'])
+            posterior_samples=h5py.File(args['chain_name'],'w')
+        else:
+            if os.path.exists('map_estimate.h5'):
+                os.remove('map_estimate.h5')
+            posterior_samples=h5py.File('map_estimate.h5','w')
+        if 'metric' in args:
+            if args['metric']=='rmse':
+                metric=RMSE()
+            elif args['metric']=='accuracy':
+                metric=Accuracy()
+        else:
+            metric=Accuracy()
+        epochs=int(epochs)
+        loss_val=list()
+        params=self.model.net.collect_params()
+        data_loader,n_batches=self._get_loader(**args)
+        momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
+        #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
+        for i in range(epochs):
+            cumulative_loss=0.0
+            for j,(X_batch, y_batch) in enumerate(data_loader):
+                y_list=split_and_load(y_batch,self.ctx)
+                X_list=split_and_load(X_batch,self.ctx)
+                with autograd.record():
+                    loss = [self.loss(params,X_train=data,y_train=label,n_data=n_batches*batch_size/len(self.ctx)) for data,label in zip(X_list,y_list)]
+                for l in loss:
+                    l.backward()
+                for var in params:
+                    allreduce(params[var].list_grad())
+                #trainer.step(batch_size)
+                cumulative_loss+=sum([l.asnumpy() for l in loss])
+                momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
+            y_pred=self.model.predict(params,X_batch)
+            metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
+            metric_name,train_accuracy=metric.get()
+            loss_val.append(cumulative_loss/(n_batches*batch_size))
+            print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[-1],metric_name,train_accuracy))
+        dset=[posterior_samples.create_dataset(var,data=params[var].list_data()[0].asnumpy()) for var in params.keys()]
+        posterior_samples.attrs['epochs']=epochs
+        posterior_samples.attrs['loss']=loss_val
+        posterior_samples.flush()
+        posterior_samples.close()
+        return params,loss_val
 
     def step(self,momentum,params):
         for var,par in zip(params,params.values()):
