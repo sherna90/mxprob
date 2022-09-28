@@ -39,11 +39,11 @@ class linear():
         return True
 
     def negative_log_prior(self, par,**args):
-        log_prior=np.zeros(shape=1,ctx=self.ctx)
         param_prior=mxp.normal.Normal(loc=0.,scale=np.sqrt(self.hyper['alpha']))
+        log_prior=list()
         for var in par.keys():
-            log_prior=log_prior-np.sum(param_prior.log_prob(par[var].data()))
-        return log_prior
+            log_prior.append(np.sum(param_prior.log_prob(par[var].data())))
+        return -np.sum(np.stack(log_prior))
        
     def negative_log_likelihood(self,par,**args):
         for k,v in args.items():
@@ -124,7 +124,7 @@ class pretrained_model_aleatoric(linear_aleatoric):
         net.add(gluon.nn.Dense(32))#capa de salida
         net.add(gluon.nn.Dense(2*out_units))#capa de salida
         self.reset(net)
-        net(data.as_in_context(self.ctx))
+        #net(data.as_in_context(self.ctx))
         net.hybridize(static_alloc=True, static_shape=True)
         return net
 

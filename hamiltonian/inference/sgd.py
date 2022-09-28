@@ -2,7 +2,6 @@ import mxnet as mx
 from mxnet import nd,np, autograd, gluon
 from mxnet.ndarray import clip
 from mxnet.gluon.metric import Accuracy,RMSE
-from tqdm import tqdm, trange
 from copy import deepcopy
 from hamiltonian.inference.base import base
 import h5py 
