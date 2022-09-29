@@ -47,7 +47,7 @@ class sgd(base):
                 #trainer.step(batch_size)
                 cumulative_loss+=loss.asnumpy()
                 momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
-            y_pred=self.model.predict(params,X_batch)
+            y_pred=self.predict(params,X_batch)
             metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
@@ -59,13 +59,47 @@ class sgd(base):
         posterior_samples.close()
         return params,loss_val
 
+    def step(self,momentum,params):
+        for var,par in zip(params,params.values()):
+            for theta,rho in zip(par.list_data(),momentum[var]):
+                try:
+                    grad=theta.grad
+                    rho[:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                    theta[:]=theta-0.5*self.step_size*grad/nd.np.sqrt(rho + 1e-6)
+                except:
+                    None
+        return momentum, params
+
+    def predict(self,par,num_samples=100,**args):
+        data_loader,n_examples=self._get_loader(**args)
+        total_labels=[]
+        total_samples=[]
+        total_loglike=[]
+        params=self.model.net.collect_params()
+        for var in params:
+            if var in par:
+                params[var].data()[:]=mx.numpy.array(par[var]).copyto(self.ctx)
+        for X_test,y_test in data_loader:
+            X_test=X_test.as_in_context(self.ctx)
+            y_test=y_test.as_in_context(self.ctx)
+            y_hat=self.model.forward(par,X_test)
+            total_loglike.append(y_hat.log_prob(y_test))
+            total_samples.append(y_hat.sample_n(num_samples))
+            total_labels.append(y_test)
+        #total_samples=np.concatenate(total_samples,axis=1)
+        #total_labels=np.concatenate(total_labels)
+        #total_loglike=np.concatenate(total_loglike)
+        return total_samples,total_labels,total_loglike   
+
+class sgd_multi_gpu(base):
+
     def allreduce(data):
         for i in range(1, len(data)):
             data[0][:] += data[i].copyto(data[0].ctx)
         for i in range(1, len(data)):
             data[0].copyto(data[i])
 
-    def fit_multi_gpu(self,epochs=1,batch_size=1,**args):
+    def fit(self,epochs=1,batch_size=1,**args):
         if 'verbose' in args:
             verbose=args['verbose']
         else:
@@ -145,4 +179,4 @@ class sgd(base):
         #total_samples=np.concatenate(total_samples,axis=1)
         #total_labels=np.concatenate(total_labels)
         #total_loglike=np.concatenate(total_loglike)
-        return total_samples,total_labels,total_loglike   
+        return total_samples,total_labels,total_loglike 
