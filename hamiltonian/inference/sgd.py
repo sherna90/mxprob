@@ -43,7 +43,7 @@ class sgd(base):
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
                     #loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
-                    loss=self.model.negative_log_likelihood(params,X_train=X_batch,y_train=y_batch)
+                    loss=self.model.loss(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #trainer.step(batch_size)
                 cumulative_loss+=loss.asnumpy()
