@@ -34,7 +34,7 @@ class sgd(base):
         loss_val=list()
         params=self.model.net.collect_params()
         data_loader,n_batches=self._get_loader(**args)
-        momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
+        momentum={var:[mx.np.zeros_like(params[var].data())] for var in params.keys()}
         #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
         for i in range(epochs):
             cumulative_loss=0.0
@@ -89,8 +89,7 @@ class sgd(base):
         loss_val=list()
         params=self.model.net.collect_params()
         data_loader,n_batches=self._get_loader(**args)
-        momentum=[{var:mx.np.zeros_like(params[var].data()) for var in params.keys()} ]
-        #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
+        momentum={var:[mx.np.zeros_like(par) for par in params[var].list_data() ] for var in params.keys()}
         for i in range(epochs):
             cumulative_loss=0.0
             for j,(X_batch, y_batch) in enumerate(data_loader):
@@ -102,7 +101,6 @@ class sgd(base):
                     l.backward()
                 for var in params:
                     allreduce(params[var].list_grad())
-                #trainer.step(batch_size)
                 cumulative_loss+=sum([l.asnumpy() for l in loss])
                 momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
             y_pred=self.model.predict(params,X_batch)
@@ -119,22 +117,13 @@ class sgd(base):
 
     def step(self,momentum,params):
         for var,par in zip(params,params.values()):
-            try:
-                grad=par.grad()
-                momentum[var][:] = self.gamma*momentum[var]+ self.step_size*grad
-                par.data()[:]=par.data()-momentum[var]
-            except:
-                None
-        return momentum, params
-
-    def step(self,momentum,params,n_data=1.):
-        for var,par in zip(params,params.values()):
-            try:
-                grad=par.grad()
-                momentum[var][:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
-                par.data()[:]=par.data()-0.5*self.step_size*grad/nd.np.sqrt(momentum[var] + 1e-6)
-            except:
-                None
+            for theta,rho in zip(par.list_data(),momentum[var]):
+                try:
+                    grad=theta.grad
+                    rho[:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                    theta[:]=theta-0.5*self.step_size*grad/nd.np.sqrt(rho + 1e-6)
+                except:
+                    None
         return momentum, params
 
     def predict(self,par,num_samples=100,**args):
