@@ -34,7 +34,7 @@ class sgd(base):
         loss_val=list()
         params=self.model.net.collect_params()
         data_loader,n_batches=self._get_loader(**args)
-        momentum={var:[mx.np.zeros_like(params[var].data())] for var in params.keys()}
+        momentum={var:mx.np.zeros_like(params[var].data()) for var in params.keys()}
         #trainer = gluon.Trainer(params, 'sgd', {'learning_rate': self.step_size})
         for i in range(epochs):
             cumulative_loss=0.0
@@ -42,13 +42,14 @@ class sgd(base):
                 X_batch=X_batch.as_in_context(self.ctx)
                 y_batch=y_batch.as_in_context(self.ctx)
                 with autograd.record():
-                    loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
+                    #loss = self.loss(params,X_train=X_batch,y_train=y_batch,n_data=n_batches*batch_size)
+                    loss=self.model.negative_log_likelihood(params,X_train=X_batch,y_train=y_batch)
                 loss.backward()#calculo de derivadas parciales de la funcion segun sus parametros. por retropropagacion
                 #trainer.step(batch_size)
                 cumulative_loss+=loss.asnumpy()
-                momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
-            y_pred=self.predict(params,X_batch)
-            metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
+                self.step(momentum,params)
+                y_pred=self.model.predict(params,X_batch)
+                metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
             print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[-1],metric_name,train_accuracy))
@@ -60,15 +61,13 @@ class sgd(base):
         return params,loss_val
 
     def step(self,momentum,params):
-        for var,par in zip(params,params.values()):
-            for theta,rho in zip(par.list_data(),momentum[var]):
-                try:
-                    grad=theta.grad
-                    rho[:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
-                    theta[:]=theta-0.5*self.step_size*grad/nd.np.sqrt(rho + 1e-6)
-                except:
-                    None
-        return momentum, params
+        for var in params:
+            try:
+                grad=params[var].grad()
+                momentum[var] = self.gamma*momentum[var]+ (1.-self.gamma)*np.square(grad)
+                params[var].data()[:]=params[var].data()-0.5*self.step_size*grad/np.sqrt(momentum[var] + 1e-6)
+            except:
+                None
 
     def predict(self,par,num_samples=100,**args):
         data_loader,n_examples=self._get_loader(**args)
@@ -137,8 +136,9 @@ class sgd_multi_gpu(base):
                     allreduce(params[var].list_grad())
                 cumulative_loss+=sum([l.asnumpy() for l in loss])
                 momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
-            y_pred=self.model.predict(params,X_batch)
-            metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
+            for (data,label) in zip(X_list,y_list):
+                y_pred=self.model.forward(params,data)
+                metric.update(labels=[label], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(label.dtype)])    
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
             print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[-1],metric_name,train_accuracy))
