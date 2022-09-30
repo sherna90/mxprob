@@ -34,7 +34,7 @@ class softmax():
     def forward(self,par,**args):
         for k,v in args.items():
             if k=='X_train':
-                X=v.as_in_context(self.ctx)
+                X=v
         y_linear = self.net.forward(X)
         yhat = npx.softmax(y_linear)
         cat=mxp.Categorical(1,prob=yhat)
@@ -107,9 +107,9 @@ class pretrained_model(softmax):
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
         if (type(self.ctx)=='list'):
-            [net(data.as_in_context(self.ctx[i])) for i in len(self.ctx)]
+            [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
         else:
-            net(data.as_in_context(self.ctx)
+            net(data.as_in_context(self.ctx))
         net.hybridize(static_alloc=True, static_shape=True)
         return net
 
@@ -136,7 +136,10 @@ class lenet(softmax):
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
-        net(data.as_in_context(self.ctx))
+        if (type(self.ctx)=='list'):
+            [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
+        else:
+            net(data.as_in_context(self.ctx))
         #net.hybridize()
         return net
     
