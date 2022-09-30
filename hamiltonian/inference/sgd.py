@@ -81,12 +81,12 @@ class sgd(base):
         for X_test,y_test in data_loader:
             X_test=X_test.as_in_context(self.ctx)
             y_test=y_test.as_in_context(self.ctx)
-            y_hat=self.model.forward(par,X_test)
+            y_hat=self.model.predict(par,X_test)
             total_loglike.append(y_hat.log_prob(y_test))
             total_samples.append(y_hat.sample_n(num_samples))
             total_labels.append(y_test)
-        #total_samples=np.concatenate(total_samples,axis=1)
-        #total_labels=np.concatenate(total_labels)
+        total_samples=np.concatenate(total_samples,axis=1)
+        total_labels=np.concatenate(total_labels)
         #total_loglike=np.concatenate(total_loglike)
         return total_samples,total_labels,total_loglike   
 
