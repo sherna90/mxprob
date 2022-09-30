@@ -106,7 +106,10 @@ class pretrained_model(softmax):
         net.add(model.features)
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
-        net(data.as_in_context(self.ctx))
+        if (type(self.ctx)=='list'):
+            [net(data.as_in_context(self.ctx[i])) for i in len(self.ctx)]
+        else:
+            net(data.as_in_context(self.ctx)
         net.hybridize(static_alloc=True, static_shape=True)
         return net
 
