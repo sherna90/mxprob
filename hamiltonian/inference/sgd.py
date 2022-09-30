@@ -137,7 +137,7 @@ class sgd_multi_gpu(base):
                 cumulative_loss+=sum([l.asnumpy() for l in loss])
                 momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
             for (data,label) in zip(X_list,y_list):
-                y_pred=self.model.forward(params,data)
+                y_pred=self.model.predict(params,data)
                 metric.update(labels=[label], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(label.dtype)])    
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
@@ -168,15 +168,17 @@ class sgd_multi_gpu(base):
         params=self.model.net.collect_params()
         for var in params:
             if var in par:
-                params[var].data()[:]=mx.numpy.array(par[var]).copyto(self.ctx)
+                for theta in params.list_data():
+                    theta[:]=mx.numpy.array(par[var]).copyto(theta.ctx)
         for X_test,y_test in data_loader:
-            X_test=X_test.as_in_context(self.ctx)
-            y_test=y_test.as_in_context(self.ctx)
-            y_hat=self.model.predict(par,X_test)
-            total_loglike.append(y_hat.log_prob(y_test))
-            total_samples.append(y_hat.sample_n(num_samples))
-            total_labels.append(y_test)
-        #total_samples=np.concatenate(total_samples,axis=1)
-        #total_labels=np.concatenate(total_labels)
+            y_list=split_and_load(X_test,self.ctx)
+            X_list=split_and_load(y_test,self.ctx)
+            for (data,label) in zip(X_list,y_list):
+                y_hat=self.model.predict(params,X_test)
+                total_loglike.append(y_hat.log_prob(y_test).asnumpy())
+                total_samples.append(y_hat.sample_n(num_samples).asnumpy())
+                total_labels.append(label.asnumpy())
+        total_samples=np.concatenate(total_samples,axis=1)
+        total_labels=np.concatenate(total_labels)
         #total_loglike=np.concatenate(total_loglike)
         return total_samples,total_labels,total_loglike 
