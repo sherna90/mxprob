@@ -129,7 +129,8 @@ class sgd_multi_gpu(base):
                 y_list=split_and_load(y_batch,self.ctx)
                 X_list=split_and_load(X_batch,self.ctx)
                 with autograd.record():
-                    loss = [self.loss(params,X_train=data,y_train=label,n_data=n_batches*batch_size/len(self.ctx)) for data,label in zip(X_list,y_list)]
+                    #loss = [self.loss(params,X_train=data,y_train=label,n_data=n_batches*batch_size/len(self.ctx)) for data,label in zip(X_list,y_list)]
+                    loss = [self.model.loss(params,X_train=data,y_train=label) for data,label in zip(X_list,y_list)]
                 for l in loss:
                     l.backward()
                 for var in params:
@@ -155,7 +156,7 @@ class sgd_multi_gpu(base):
             for theta,rho in zip(par.list_data(),momentum[var]):
                 try:
                     grad=theta.grad
-                    rho[:] = self.gamma*momentum[var]+ (1.-self.gamma)*nd.np.square(grad)
+                    rho[:] = self.gamma*rho+ (1.-self.gamma)*nd.np.square(grad)
                     theta[:]=theta-0.5*self.step_size*grad/nd.np.sqrt(rho + 1e-6)
                 except:
                     None
