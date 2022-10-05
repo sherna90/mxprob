@@ -119,12 +119,12 @@ class pretrained_model(softmax):
 
 class lenet(softmax):
     
-    def __init__(self,_hyper,in_units=(1,28,28),out_units=10,ctx=mx.cpu()):
+    def __init__(self,_hyper,in_units=(1,28,28),out_units=10,ctx=mx.cpu(),hybrid=True):
         self.hyper=_hyper
         self.ctx=ctx
-        self.net  = self._init_net(in_units,out_units)
+        self.net  = self._init_net(in_units,out_units,hybrid)
         
-    def _init_net(self,in_units,out_units):
+    def _init_net(self,in_units,out_units,hybrid=True):
         net = gluon.nn.HybridSequential()#inicializacion api sequencial
         net.add(
             gluon.nn.Conv2D(channels=6, kernel_size=5, padding=2, activation='softrelu'),
@@ -140,7 +140,8 @@ class lenet(softmax):
             [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
         else:
             net(data.as_in_context(self.ctx))
-        #net.hybridize()
+        if hybrid:
+            net.hybridize()
         return net
     
 

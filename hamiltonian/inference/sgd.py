@@ -130,8 +130,7 @@ class sgd_multi_gpu(base):
                 X_list=split_and_load(X_batch,self.ctx)
                 with autograd.record():
                     loss = [self.loss(params,X_train=data,y_train=label,n_data=n_batches*batch_size/len(self.ctx)) for data,label in zip(X_list,y_list)]
-                for i,l in enumerate(loss):
-                    #print('gpu : {0}, loss {1}'.format(i, l.sum()))
+                for l in loss:
                     l.backward()
                 for var in params:
                     self.allreduce(params[var].list_grad())

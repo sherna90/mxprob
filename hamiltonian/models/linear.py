@@ -85,13 +85,13 @@ class linear_aleatoric(linear):
 
 class pretrained_model(linear):
     
-    def __init__(self,model_name,_hyper,in_units=(1,224,224),out_units=10,ctx=mx.cpu()):
+    def __init__(self,model_name,_hyper,in_units=(1,224,224),out_units=10,ctx=mx.cpu(),hybrid=True):
         self.hyper=_hyper
         self.ctx=ctx
         self.model_name=model_name
-        self.net = self._init_net(in_units,out_units)
+        self.net = self._init_net(in_units,out_units,hybrid)
         
-    def _init_net(self,in_units,out_units):
+    def _init_net(self,in_units,out_units,hybrid):
         data = nd.numpy.ones((1,in_units[0],in_units[1],in_units[2]))
         net = gluon.nn.HybridSequential()#inicializacion api sequencial
         model=get_model(self.model_name,pretrained=True,ctx=self.ctx)
@@ -101,8 +101,12 @@ class pretrained_model(linear):
         net.add(gluon.nn.Dense(32))#capa de salida
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
-        net(data.as_in_context(self.ctx))
-        net.hybridize(static_alloc=True, static_shape=True)
+        if (type(self.ctx)=='list'):
+            [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
+        else:
+            net(data.as_in_context(self.ctx))
+        if hybrid:
+            net.hybridize()
         return net
 
     def reset(self,net,sigma=0.01,init=True):
