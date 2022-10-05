@@ -136,7 +136,7 @@ class lenet(softmax):
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
         data = mx.np.ones((1,in_units[0],in_units[1],in_units[2]))
-        if (type(self.ctx)=='list'):
+        if (type(self.ctx) is list):
             [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
         else:
             net(data.as_in_context(self.ctx))

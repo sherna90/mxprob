@@ -92,7 +92,7 @@ class sgd(base):
 
 class sgd_multi_gpu(base):
 
-    def allreduce(data):
+    def allreduce(self,data):
         for i in range(1, len(data)):
             data[0][:] += data[i].copyto(data[0].ctx)
         for i in range(1, len(data)):
@@ -130,15 +130,17 @@ class sgd_multi_gpu(base):
                 X_list=split_and_load(X_batch,self.ctx)
                 with autograd.record():
                     loss = [self.loss(params,X_train=data,y_train=label,n_data=n_batches*batch_size/len(self.ctx)) for data,label in zip(X_list,y_list)]
-                for l in loss:
+                for i,l in enumerate(loss):
+                    #print('gpu : {0}, loss {1}'.format(i, l.sum()))
                     l.backward()
                 for var in params:
-                    allreduce(params[var].list_grad())
+                    self.allreduce(params[var].list_grad())
                 cumulative_loss+=sum([l.asnumpy() for l in loss])
-                momentum,params=self.step(momentum,params,n_data=n_batches*batch_size)
-            for (data,label) in zip(X_list,y_list):
-                y_pred=self.model.predict(params,data)
-                metric.update(labels=[label], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(label.dtype)])    
+                momentum,params=self.step(momentum,params)
+                for (data,label) in zip(X_list,y_list):
+                    y_pred=self.model.predict(params,data)
+                    metric.update(labels=[label.as_in_context(mx.cpu())], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(label.dtype).as_in_context(mx.cpu())])   
+                #print('prediction done!')
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
             print('iteration {0}, train loss: {1:.4f}, train {2} : {3:.4f}'.format(i,loss_val[-1],metric_name,train_accuracy))
@@ -166,16 +168,16 @@ class sgd_multi_gpu(base):
         total_samples=[]
         total_loglike=[]
         params=self.model.net.collect_params()
-        for var in params:
+        '''for var in params:
             if var in par:
                 for theta in params.list_data():
-                    theta[:]=mx.numpy.array(par[var]).copyto(theta.ctx)
+                    theta[:]=mx.numpy.array(par[var]).copyto(theta.ctx)'''
         for X_test,y_test in data_loader:
             y_list=split_and_load(X_test,self.ctx)
             X_list=split_and_load(y_test,self.ctx)
             for (data,label) in zip(X_list,y_list):
-                y_hat=self.model.predict(params,X_test)
-                total_loglike.append(y_hat.log_prob(y_test).asnumpy())
+                y_hat=self.model.predict(params,data)
+                total_loglike.append(y_hat.log_prob(label).asnumpy())
                 total_samples.append(y_hat.sample_n(num_samples).asnumpy())
                 total_labels.append(label.asnumpy())
         total_samples=np.concatenate(total_samples,axis=1)
