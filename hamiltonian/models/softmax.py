@@ -143,7 +143,3 @@ class lenet(softmax):
         if hybrid:
             net.hybridize()
         return net
-    
-
-
-

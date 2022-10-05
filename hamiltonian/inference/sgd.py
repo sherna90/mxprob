@@ -168,18 +168,18 @@ class sgd_multi_gpu(base):
         total_samples=[]
         total_loglike=[]
         params=self.model.net.collect_params()
-        '''for var in params:
+        for var in params:
             if var in par:
-                for theta in params.list_data():
-                    theta[:]=mx.numpy.array(par[var]).copyto(theta.ctx)'''
+                for theta in params[var].list_data():
+                    theta[:]=mx.numpy.array(par[var]).copyto(theta.ctx)
         for X_test,y_test in data_loader:
-            y_list=split_and_load(X_test,self.ctx)
-            X_list=split_and_load(y_test,self.ctx)
+            X_list=split_and_load(X_test,self.ctx)
+            y_list=split_and_load(y_test,self.ctx)
             for (data,label) in zip(X_list,y_list):
                 y_hat=self.model.predict(params,data)
-                total_loglike.append(y_hat.log_prob(label).asnumpy())
-                total_samples.append(y_hat.sample_n(num_samples).asnumpy())
-                total_labels.append(label.asnumpy())
+                total_loglike.append(y_hat.log_prob(label).as_in_context(mx.cpu()))
+                total_samples.append(y_hat.sample_n(num_samples).as_in_context(mx.cpu()))
+                total_labels.append(label.as_in_context(mx.cpu()))
         total_samples=np.concatenate(total_samples,axis=1)
         total_labels=np.concatenate(total_labels)
         #total_loglike=np.concatenate(total_loglike)
