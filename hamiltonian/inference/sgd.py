@@ -134,12 +134,13 @@ class sgd_multi_gpu(base):
                 for l in loss:
                     l.backward()
                 for var in params:
-                    self.allreduce(params[var].list_grad())
+                    if params[var].grad_red:
+                        self.allreduce(params[var].list_grad())
                 cumulative_loss+=sum([l.asnumpy() for l in loss])
                 momentum,params=self.step(momentum,params)
-                for (data,label) in zip(X_list,y_list):
-                    y_pred=self.model.predict(params,data)
-                    metric.update(labels=[label.as_in_context(mx.cpu())], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(label.dtype).as_in_context(mx.cpu())])   
+            for (data,label) in zip(X_list,y_list):
+                y_pred=self.model.predict(params,data)
+                metric.update(labels=[label.as_in_context(mx.cpu())], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(label.dtype).as_in_context(mx.cpu())])   
                 #print('prediction done!')
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
