@@ -134,7 +134,7 @@ class sgd_multi_gpu(base):
                 for l in loss:
                     l.backward()
                 for var in params:
-                    if params[var].grad_red:
+                    if params[var].grad_red!='null':
                         self.allreduce(params[var].list_grad())
                 cumulative_loss+=sum([l.asnumpy() for l in loss])
                 momentum,params=self.step(momentum,params)
