@@ -101,7 +101,7 @@ class pretrained_model(linear):
         net.add(gluon.nn.Dense(32))#capa de salida
         net.add(gluon.nn.Dense(out_units))#capa de salida
         self.reset(net)
-        if (type(self.ctx)=='list'):
+        if (type(self.ctx) is list):
             [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
         else:
             net(data.as_in_context(self.ctx))
