@@ -70,6 +70,14 @@ class linear_aleatoric(linear):
         net = gluon.nn.Sequential()#inicializacion api sequencial
         net.add(gluon.nn.Dense(2*out_units,in_units=in_units))#capa de salida
         self.reset(net)
+        self.reset(net)
+        if (type(self.ctx) is list):
+            [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
+        else:
+            net(data.as_in_context(self.ctx))
+        if hybrid:
+            net.hybridize()
+        return net
         return net
 
     def forward(self,par, **args):
@@ -133,7 +141,10 @@ class pretrained_model_aleatoric(linear_aleatoric):
         net.add(gluon.nn.Dense(32))#capa de salida
         net.add(gluon.nn.Dense(2*out_units))#capa de salida
         self.reset(net)
-        #net(data.as_in_context(self.ctx))
+        if (type(self.ctx) is list):
+            [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
+        else:
+            net(data.as_in_context(self.ctx))
         net.hybridize(static_alloc=True, static_shape=True)
         return net
 
