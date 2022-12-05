@@ -49,6 +49,7 @@ class sgd(base):
                 cumulative_loss+=loss.asnumpy()
                 self.step(momentum,params)
                 y_pred=self.model.predict(params,X_batch)
+                y_pred.logit=None
                 metric.update(labels=[y_batch], preds=[mx.np.quantile(y_pred.sample_n(100),.5,axis=0).astype(y_batch.dtype)])    
             metric_name,train_accuracy=metric.get()
             loss_val.append(cumulative_loss/(n_batches*batch_size))
