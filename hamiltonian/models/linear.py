@@ -68,6 +68,7 @@ class linear_aleatoric(linear):
 
     def _init_net(self,in_units,out_units):
         net = gluon.nn.Sequential()#inicializacion api sequencial
+        data = nd.numpy.ones((1,in_units))
         net.add(gluon.nn.Dense(2*out_units,in_units=in_units))#capa de salida
         self.reset(net)
         self.reset(net)
@@ -75,9 +76,6 @@ class linear_aleatoric(linear):
             [net(data.as_in_context(self.ctx[i])) for i in range(len(self.ctx))]
         else:
             net(data.as_in_context(self.ctx))
-        if hybrid:
-            net.hybridize()
-        return net
         return net
 
     def forward(self,par, **args):
@@ -86,7 +84,7 @@ class linear_aleatoric(linear):
             if k=='X_train':
                 X=v
         y_linear = self.net.forward(X)
-        scale=1e-3 + softplus(0.05 * y_linear[...,self.out_units:])
+        scale=np.exp(0.5 * y_linear[...,self.out_units:])
         loc=y_linear[..., :self.out_units]
         y_hat=mxp.normal.Normal(loc=loc,scale=scale)
         return y_hat
